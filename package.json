@@ -1,0 +1,36 @@
+{
+  "name": "bestbuy-marketplace",
+  "version": "1.0.0",
+  "description": "BestBuy Multi-Dealer Car Marketplace (Windows Desktop Application)",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:electron\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
+    "build": "npm run build:client && npm run build:electron",
+    "build:client": "cd client && npm run build",
+    "build:electron": "tsc -p tsconfig.json",
+    "start": "electron ."
+  },
+  "keywords": [
+    "electron",
+    "react",
+    "typescript",
+    "car-marketplace",
+    "desktop-app",
+    "windows"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.2.0",
+    "typescript": "^5.3.3",
+    "wait-on": "^7.2.0"
+  }
+}

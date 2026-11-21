@@ -1,0 +1,92 @@
+import { app, BrowserWindow, ipcMain } from 'electron';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as dotenv from 'dotenv';
+import { registerIpcHandlers } from './ipcHandlers';
+
+// Load environment variables from .env
+dotenv.config();
+
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+let mainWindow: BrowserWindow | null = null;
+
+function createWindow(): void {
+  // Find preload.js (handles both direct outDir and nested electron outDir)
+  const preloadDirect = path.join(__dirname, 'preload.js');
+  const preloadNested = path.join(__dirname, 'electron', 'preload.js');
+  const preloadPath = fs.existsSync(preloadDirect) ? preloadDirect : preloadNested;
+
+  // Find icon
+  const iconCandidate = path.resolve(__dirname, '../../client/public/icon.png');
+  const iconPath = fs.existsSync(iconCandidate) ? iconCandidate : undefined;
+
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1024,
+    minHeight: 700,
+    frame: true,
+    titleBarStyle: 'default',
+    backgroundColor: '#f8fafc',
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+    show: false,
+    ...(iconPath ? { icon: iconPath } : {}),
+  });
+
+  if (isDev && process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else if (isDev && !process.env.ELECTRON_START_URL) {
+    // Try local Vite dev server
+    mainWindow.loadURL('http://localhost:5173').catch(() => {
+      // Fallback to static dist if dev server is not running
+      loadStaticIndex();
+    });
+  } else {
+    loadStaticIndex();
+  }
+
+  function loadStaticIndex() {
+    const candidates = [
+      path.resolve(__dirname, '../../client/dist/index.html'),
+      path.resolve(__dirname, '../client/dist/index.html'),
+      path.resolve(app.getAppPath(), 'client/dist/index.html'),
+    ];
+    const target = candidates.find(p => fs.existsSync(p));
+    if (target && mainWindow) {
+      mainWindow.loadFile(target);
+    } else {
+      console.warn('[Electron Main] Could not locate index.html, waiting or loading default');
+    }
+  }
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+app.whenReady().then(() => {
+  registerIpcHandlers(ipcMain);
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
