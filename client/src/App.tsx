@@ -8,7 +8,7 @@ import { MainLayout } from './components/layout/MainLayout';
 import { CustomerDashboard } from './pages/dashboard/CustomerDashboard';
 import { DealerDashboard } from './pages/dashboard/DealerDashboard';
 import { AdminDashboard } from './pages/dashboard/AdminDashboard';
-import { PlaceholderPage } from './pages/PlaceholderPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { useAuthStore } from './store/authStore';
 import type { UserRole } from './types';
 
@@ -38,35 +38,91 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public routes */}
+        {/* Public authentication and entry routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/role-selection" element={<RoleSelectionPage />} />
 
-        {/* Protected routes */}
+        {/* Authenticated Application Layout */}
         <Route path="/" element={<RequireAuth><MainLayout /></RequireAuth>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<RoleDashboard />} />
 
-          {/* Customer routes */}
-          <Route path="browse" element={<RequireAuth allowedRoles={['customer']}><PlaceholderPage title="Browse Cars" description="Search and filter vehicles from all dealers. Coming soon." /></RequireAuth>} />
-          <Route path="queue" element={<RequireAuth allowedRoles={['customer']}><PlaceholderPage title="My Queue" description="View your position in vehicle queues and manage offers." /></RequireAuth>} />
-          <Route path="bookings" element={<RequireAuth allowedRoles={['customer']}><PlaceholderPage title="My Bookings" description="Track and manage your vehicle bookings." /></RequireAuth>} />
+          {/* Customer-only protected routes */}
+          <Route
+            path="browse"
+            element={
+              <RequireAuth allowedRoles={['customer']}>
+                <CustomerDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="queue"
+            element={
+              <RequireAuth allowedRoles={['customer']}>
+                <CustomerDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="bookings"
+            element={
+              <RequireAuth allowedRoles={['customer']}>
+                <CustomerDashboard />
+              </RequireAuth>
+            }
+          />
 
-          {/* Dealer routes */}
-          <Route path="inventory" element={<RequireAuth allowedRoles={['dealer']}><PlaceholderPage title="My Inventory" description="Manage your vehicle listings, prices, and availability." /></RequireAuth>} />
-          <Route path="dealership" element={<RequireAuth allowedRoles={['dealer']}><PlaceholderPage title="Dealership Profile" description="Update your dealership information and location." /></RequireAuth>} />
+          {/* Dealer-only protected routes */}
+          <Route
+            path="inventory"
+            element={
+              <RequireAuth allowedRoles={['dealer']}>
+                <DealerDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="dealership"
+            element={
+              <RequireAuth allowedRoles={['dealer']}>
+                <DealerDashboard />
+              </RequireAuth>
+            }
+          />
 
-          {/* Admin routes */}
-          <Route path="admin/users" element={<RequireAuth allowedRoles={['admin']}><PlaceholderPage title="All Users" description="View and manage all registered users." /></RequireAuth>} />
-          <Route path="admin/dealers" element={<RequireAuth allowedRoles={['admin']}><PlaceholderPage title="All Dealers" description="Verify and manage dealer accounts." /></RequireAuth>} />
-          <Route path="admin/listings" element={<RequireAuth allowedRoles={['admin']}><PlaceholderPage title="All Listings" description="Monitor all vehicle listings on the platform." /></RequireAuth>} />
+          {/* Admin-only protected routes */}
+          <Route
+            path="admin/users"
+            element={
+              <RequireAuth allowedRoles={['admin']}>
+                <AdminDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="admin/dealers"
+            element={
+              <RequireAuth allowedRoles={['admin']}>
+                <AdminDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="admin/listings"
+            element={
+              <RequireAuth allowedRoles={['admin']}>
+                <AdminDashboard />
+              </RequireAuth>
+            }
+          />
 
-          {/* Shared routes */}
-          <Route path="settings" element={<PlaceholderPage title="Settings" description="Manage your account preferences and notifications." />} />
+          {/* Shared authenticated routes */}
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
 
-        {/* Fallback */}
+        {/* Catch-all fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

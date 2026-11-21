@@ -1,4 +1,4 @@
-import { IDatabaseAdapter } from '../IDatabaseAdapter';
+import { IDatabaseAdapter, AdminStats } from '../IDatabaseAdapter';
 import { DatabaseConfig } from '../config';
 import {
   User,
@@ -6,14 +6,16 @@ import {
   VehicleListing,
   QueueEntry,
   Booking,
+  Offer,
   ApiResponse,
+  RegisterData,
 } from '../../types';
 
 /**
  * Production PostgreSQL Adapter Skeleton.
  * 
  * To activate:
- * 1. Install driver: `npm install pg @types/pg` (or prisma / drizzle)
+ * 1. Install driver: `npm install pg @types/pg`
  * 2. Set environment variables in .env:
  *    DATA_ADAPTER=postgres
  *    DATABASE_URL=postgresql://user:password@localhost:5432/bestbuy_db
@@ -34,14 +36,12 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
         'PostgresDatabaseAdapter: DATABASE_URL or DATABASE_HOST must be configured in .env'
       );
     }
-    // E.g.: this.pool = new Pool({ connectionString: this.config.url });
     this.isConnected = true;
     console.log(`[PostgresDatabaseAdapter] Connected to database: ${this.config.database || 'default'}`);
   }
 
   async disconnect(): Promise<void> {
     if (this.isConnected) {
-      // E.g.: await this.pool.end();
       this.isConnected = false;
     }
   }
@@ -50,10 +50,13 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
     login: async (_credentials: { email: string; password: string }): Promise<ApiResponse<{ user: User; token: string }>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
-    register: async (_data: { name: string; email: string; password: string; role: string }): Promise<ApiResponse<{ user: User; token: string }>> => {
+    register: async (_data: RegisterData): Promise<ApiResponse<{ user: User; token: string }>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
     getUserById: async (_id: string): Promise<ApiResponse<User>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
+    getAllUsers: async (): Promise<ApiResponse<User[]>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
   };
@@ -86,6 +89,9 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
     update: async (_id: string, _data: Record<string, unknown>): Promise<ApiResponse<Dealer>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
+    updateStatus: async (_id: string, _status: Dealer['status']): Promise<ApiResponse<Dealer>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
   };
 
   queue = {
@@ -101,9 +107,33 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
     getByCustomerId: async (_customerId: string): Promise<ApiResponse<QueueEntry[]>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
+    getAll: async (): Promise<ApiResponse<QueueEntry[]>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
+  };
+
+  offers = {
+    getAll: async (): Promise<ApiResponse<Offer[]>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
+    getByCustomerId: async (_customerId: string): Promise<ApiResponse<Offer[]>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
+    getByDealerId: async (_dealerId: string): Promise<ApiResponse<Offer[]>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
+    create: async (_data: Omit<Offer, 'id' | 'createdAt'>): Promise<ApiResponse<Offer>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
+    updateStatus: async (_id: string, _status: Offer['status']): Promise<ApiResponse<Offer>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
   };
 
   bookings = {
+    getAll: async (): Promise<ApiResponse<Booking[]>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
     create: async (_data: { customerId: string; listingId: string; dealerId: string; notes?: string }): Promise<ApiResponse<Booking>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
@@ -114,6 +144,12 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
     updateStatus: async (_id: string, _status: Booking['status']): Promise<ApiResponse<Booking>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
+  };
+
+  admin = {
+    getStats: async (): Promise<ApiResponse<AdminStats>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
   };

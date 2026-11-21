@@ -78,6 +78,13 @@ app.whenReady().then(() => {
   registerIpcHandlers(ipcMain);
   createWindow();
 
+  if (process.env.TEST_BOOT === 'true') {
+    console.log('[BestBuy Desktop Engine] Boot verification successful!');
+    setTimeout(() => {
+      app.quit();
+    }, 1000);
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();

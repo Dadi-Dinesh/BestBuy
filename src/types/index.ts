@@ -4,21 +4,27 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  phoneNumber?: string;
   role: UserRole;
   createdAt: string;
   avatarUrl?: string;
+  dealerProfile?: Dealer;
 }
 
 export interface Dealer {
   id: string;
   userId: string;
   dealershipName: string;
+  registrationNumber: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
   address: string;
   city: string;
   state: string;
-  phone: string;
-  email: string;
+  pinCode: string;
   logoUrl?: string;
+  status: 'pending' | 'approved' | 'rejected';
   isVerified: boolean;
   createdAt: string;
 }
@@ -68,15 +74,39 @@ export interface QueueEntry {
   vehicleModelId: string;
   variantId: string;
   customerId: string;
+  customerName?: string;
+  customerPhone?: string;
   position: number;
   status: 'waiting' | 'offered' | 'booked' | 'cancelled';
   offeredListingId?: string;
   createdAt: string;
+  vehicleModel?: VehicleModel;
+  variant?: VehicleVariant;
+}
+
+export interface Offer {
+  id: string;
+  queueEntryId?: string;
+  customerId: string;
+  customerName?: string;
+  dealerId: string;
+  dealerName?: string;
+  vehicleModelId: string;
+  vehicleName: string;
+  variantName?: string;
+  offeredPrice: number;
+  originalPrice: number;
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  expiryDate: string;
+  createdAt: string;
+  notes?: string;
 }
 
 export interface Booking {
   id: string;
   customerId: string;
+  customerName?: string;
+  customerPhone?: string;
   listingId: string;
   dealerId: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
@@ -95,6 +125,32 @@ export interface Notification {
   isRead: boolean;
   createdAt: string;
 }
+
+export interface CustomerRegisterData {
+  role: 'customer';
+  name: string;
+  email: string;
+  phoneNumber: string;
+  password: string;
+}
+
+export interface DealerRegisterData {
+  role: 'dealer';
+  name: string;
+  email: string;
+  phoneNumber: string;
+  password: string;
+  dealershipName: string;
+  registrationNumber: string;
+  contactPerson: string;
+  dealershipPhone: string;
+  address: string;
+  city: string;
+  state: string;
+  pinCode: string;
+}
+
+export type RegisterData = CustomerRegisterData | DealerRegisterData;
 
 export interface ApiResponse<T> {
   success: boolean;

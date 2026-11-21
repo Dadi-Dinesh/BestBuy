@@ -4,8 +4,19 @@ import {
   VehicleListing,
   QueueEntry,
   Booking,
+  Offer,
   ApiResponse,
+  RegisterData,
 } from '../types';
+
+export interface AdminStats {
+  totalCustomers: number;
+  totalDealers: number;
+  totalVehicles: number;
+  activeQueues: number;
+  totalBookings: number;
+  pendingApprovals: number;
+}
 
 export interface IDatabaseAdapter {
   readonly name: string;
@@ -14,8 +25,9 @@ export interface IDatabaseAdapter {
 
   auth: {
     login(credentials: { email: string; password: string }): Promise<ApiResponse<{ user: User; token: string }>>;
-    register(data: { name: string; email: string; password: string; role: string }): Promise<ApiResponse<{ user: User; token: string }>>;
+    register(data: RegisterData): Promise<ApiResponse<{ user: User; token: string }>>;
     getUserById(id: string): Promise<ApiResponse<User>>;
+    getAllUsers(): Promise<ApiResponse<User[]>>;
   };
 
   vehicles: {
@@ -30,6 +42,7 @@ export interface IDatabaseAdapter {
     getAll(): Promise<ApiResponse<Dealer[]>>;
     getById(id: string): Promise<ApiResponse<Dealer>>;
     update(id: string, data: Record<string, unknown>): Promise<ApiResponse<Dealer>>;
+    updateStatus(id: string, status: Dealer['status']): Promise<ApiResponse<Dealer>>;
   };
 
   queue: {
@@ -37,12 +50,26 @@ export interface IDatabaseAdapter {
     getPosition(queueId: string): Promise<ApiResponse<{ position: number }>>;
     leave(queueId: string): Promise<ApiResponse<{ id: string }>>;
     getByCustomerId(customerId: string): Promise<ApiResponse<QueueEntry[]>>;
+    getAll(): Promise<ApiResponse<QueueEntry[]>>;
+  };
+
+  offers: {
+    getAll(): Promise<ApiResponse<Offer[]>>;
+    getByCustomerId(customerId: string): Promise<ApiResponse<Offer[]>>;
+    getByDealerId(dealerId: string): Promise<ApiResponse<Offer[]>>;
+    create(data: Omit<Offer, 'id' | 'createdAt'>): Promise<ApiResponse<Offer>>;
+    updateStatus(id: string, status: Offer['status']): Promise<ApiResponse<Offer>>;
   };
 
   bookings: {
+    getAll(): Promise<ApiResponse<Booking[]>>;
     create(data: { customerId: string; listingId: string; dealerId: string; notes?: string }): Promise<ApiResponse<Booking>>;
     getByCustomerId(customerId: string): Promise<ApiResponse<Booking[]>>;
     getByDealerId(dealerId: string): Promise<ApiResponse<Booking[]>>;
     updateStatus(id: string, status: Booking['status']): Promise<ApiResponse<Booking>>;
+  };
+
+  admin: {
+    getStats(): Promise<ApiResponse<AdminStats>>;
   };
 }
