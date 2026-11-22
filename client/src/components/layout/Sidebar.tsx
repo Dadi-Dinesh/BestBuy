@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   ChevronRight,
+  TrendingDown,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { cn } from '../../utils/helpers';
@@ -25,6 +26,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', icon: <LayoutDashboard size={18} />, roles: ['customer', 'dealer', 'admin'] },
   { label: 'Browse Cars', to: '/browse', icon: <Search size={18} />, roles: ['customer'] },
+  { label: 'Compare Dealers', to: '/compare', icon: <TrendingDown size={18} />, roles: ['customer'] },
   { label: 'My Queue', to: '/queue', icon: <ClipboardList size={18} />, roles: ['customer'] },
   { label: 'My Bookings', to: '/bookings', icon: <BookOpen size={18} />, roles: ['customer'] },
   { label: 'My Inventory', to: '/inventory', icon: <Car size={18} />, roles: ['dealer'] },

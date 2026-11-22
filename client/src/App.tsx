@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LoadingScreen } from './pages/LoadingScreen';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
@@ -9,6 +9,7 @@ import { CustomerDashboard } from './pages/dashboard/CustomerDashboard';
 import { DealerDashboard } from './pages/dashboard/DealerDashboard';
 import { AdminDashboard } from './pages/dashboard/AdminDashboard';
 import { DealershipProfilePage } from './pages/dealer/DealershipProfilePage';
+import { VehicleDetailsPage } from './pages/vehicle/VehicleDetailsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useAuthStore } from './store/authStore';
 import type { UserRole } from './types';
@@ -37,7 +38,7 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         {/* Public authentication and entry routes */}
         <Route path="/login" element={<LoginPage />} />
@@ -54,7 +55,23 @@ function App() {
             path="browse"
             element={
               <RequireAuth allowedRoles={['customer']}>
-                <CustomerDashboard />
+                <CustomerDashboard initialTab="vehicles" />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="compare"
+            element={
+              <RequireAuth allowedRoles={['customer']}>
+                <CustomerDashboard initialTab="comparison" />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="vehicle/:id"
+            element={
+              <RequireAuth allowedRoles={['customer']}>
+                <VehicleDetailsPage />
               </RequireAuth>
             }
           />
@@ -126,7 +143,7 @@ function App() {
         {/* Catch-all fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 

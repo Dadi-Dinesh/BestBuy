@@ -22,9 +22,10 @@ function createWindow(): void {
   const iconPath = fs.existsSync(iconCandidate) ? iconCandidate : undefined;
 
   mainWindow = new BrowserWindow({
+    title: 'BestBuy',
     width: 1400,
     height: 900,
-    minWidth: 1024,
+    minWidth: 1000,
     minHeight: 700,
     frame: true,
     titleBarStyle: 'default',
