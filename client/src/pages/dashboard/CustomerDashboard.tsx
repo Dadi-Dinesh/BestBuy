@@ -86,25 +86,25 @@ export const CustomerDashboard: React.FC = () => {
   // Filter vehicles
   const filteredVehicles = vehicles.filter(v => {
     const matchesSearch =
-      v.vehicleModel?.make.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      v.vehicleModel?.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
       v.color.toLowerCase().includes(searchQuery.toLowerCase()) ||
       v.dealer?.dealershipName.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesMake = selectedMake === 'all' || v.vehicleModel?.make === selectedMake;
+    const matchesMake = selectedMake === 'all' || v.brand === selectedMake;
 
     return matchesSearch && matchesMake;
   });
 
   // Price comparison groupings (models with listings from > 1 dealer or listings for same model)
   const comparisonGroups = vehicles.reduce((acc, curr) => {
-    const key = `${curr.vehicleModel?.make} ${curr.vehicleModel?.model}`;
+    const key = `${curr.brand} ${curr.model}`;
     if (!acc[key]) acc[key] = [];
     acc[key].push(curr);
     return acc;
   }, {} as Record<string, VehicleListing[]>);
 
-  const makes = ['all', ...Array.from(new Set(vehicles.map(v => v.vehicleModel?.make).filter(Boolean)))];
+  const makes = ['all', ...Array.from(new Set(vehicles.map(v => v.brand).filter(Boolean)))];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -289,13 +289,12 @@ export const CustomerDashboard: React.FC = () => {
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
                       <span className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">
-                        {v.vehicleModel?.category || 'Automobile'} • {v.vehicleModel?.year}
+                        {v.year} • {v.fuelType} • {v.transmission}
                       </span>
                       <h3 className="text-lg font-bold text-slate-900 mt-0.5">
-                        {v.vehicleModel?.make} {v.vehicleModel?.model}
+                        {v.brand} {v.model}
                       </h3>
-                      <p className="text-xs text-slate-500 font-medium">{v.variant?.name || 'Standard Edition'}</p>
-                    </div>
+                      <p className="text-xs text-slate-500 font-medium">{v.variant || 'Standard Edition'}</p>                    </div>
                     <Badge variant={v.availability === 'available' ? 'success' : 'neutral'}>
                       {v.availability}
                     </Badge>
@@ -393,7 +392,7 @@ export const CustomerDashboard: React.FC = () => {
                                 {item.dealer?.dealershipName}
                               </p>
                               <p className="text-xs text-slate-500">
-                                {item.dealer?.city}, {item.dealer?.state} • Variant: {item.variant?.name || 'Base'} • Color: {item.color}
+                                {item.dealer?.city}, {item.dealer?.state} • Variant: {item.variant || 'Base'} • Color: {item.color}
                               </p>
                             </div>
                           </div>

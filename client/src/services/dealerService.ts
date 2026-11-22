@@ -7,7 +7,7 @@ function getAPI() {
   return null;
 }
 
-const mockDealers: Dealer[] = [
+let mockDealers: Dealer[] = [
   {
     id: 'd1',
     userId: 'u2',

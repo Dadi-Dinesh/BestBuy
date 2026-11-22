@@ -9,6 +9,9 @@ import {
   Offer,
   RegisterData,
   ApiResponse,
+  CreateVehicleListingData,
+  UpdateVehicleListingData,
+  VehicleAvailabilityStatus,
 } from '../../types';
 
 export class MockDatabaseAdapter implements IDatabaseAdapter {
@@ -129,8 +132,8 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
           name: 'LE',
           trimLevel: 'Base',
           engineType: '2.5L 4-Cylinder',
-          transmission: '8-Speed Automatic',
-          fuelType: 'Gasoline',
+          transmission: 'Automatic',
+          fuelType: 'Petrol',
           seatingCapacity: 5,
           features: ['Apple CarPlay', 'Toyota Safety Sense 2.5+', 'Backup Camera', 'Dual-Zone Climate'],
         },
@@ -139,7 +142,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
           name: 'XSE Hybrid',
           trimLevel: 'Sport Premium',
           engineType: '2.5L 4-Cylinder Hybrid',
-          transmission: 'eCVT',
+          transmission: 'CVT',
           fuelType: 'Hybrid',
           seatingCapacity: 5,
           features: ['JBL 9-Speaker Audio', 'Heated Leather Seats', 'Panoramic Glass Roof', 'Head-Up Display'],
@@ -159,7 +162,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
           trimLevel: 'Sport',
           engineType: '1.5L Turbocharged VTEC',
           transmission: 'CVT',
-          fuelType: 'Gasoline',
+          fuelType: 'Petrol',
           seatingCapacity: 5,
           features: ['Honda Sensing', '12.3-inch Touchscreen', 'Wireless Apple CarPlay', '19-inch Alloy Wheels'],
         },
@@ -177,8 +180,8 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
           name: 'XLT SuperCrew',
           trimLevel: 'Mid-Level',
           engineType: '3.5L EcoBoost V6',
-          transmission: '10-Speed Automatic',
-          fuelType: 'Gasoline',
+          transmission: 'Automatic',
+          fuelType: 'Petrol',
           seatingCapacity: 6,
           features: ['SYNC 4 with 12-inch Display', 'Pro Power Onboard 2.4kW', 'Co-Pilot360 2.0', 'Tow Package'],
         },
@@ -196,7 +199,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
           name: 'Long Range AWD',
           trimLevel: 'Long Range',
           engineType: 'Dual Motor Electric',
-          transmission: 'Single-Speed Fixed Gear',
+          transmission: 'Single-Speed',
           fuelType: 'Electric',
           seatingCapacity: 5,
           features: ['Autopilot', 'All-Glass Roof', 'Premium Audio', '310 Mile Range', 'Heated All Seats'],
@@ -215,8 +218,8 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
           name: '330i xDrive',
           trimLevel: 'M Sport Package',
           engineType: '2.0L TwinPower Turbo',
-          transmission: '8-Speed Sport Automatic',
-          fuelType: 'Gasoline',
+          transmission: 'Automatic',
+          fuelType: 'Petrol',
           seatingCapacity: 5,
           features: ['BMW Curved Display', 'Live Cockpit Pro', 'Adaptive M Suspension', 'Harman Kardon'],
         },
@@ -224,94 +227,161 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     },
   ];
 
+  // Multi-dealer independent listings
   private _listings: VehicleListing[] = [
     {
       id: 'l1',
-      dealerId: 'd1',
+      dealerId: 'd1', // Premier Auto Group
       vehicleModelId: 'vm1',
       variantId: 'vv1',
-      price: 28400,
+      brand: 'Toyota',
+      model: 'Camry',
+      variant: 'LE',
+      year: 2024,
+      fuelType: 'Petrol',
+      transmission: 'Automatic',
       color: 'Midnight Black Metallic',
       mileage: 12,
       condition: 'new',
+      price: 28400,
+      exShowroomPrice: 26320,
+      onRoadPrice: 29800,
+      dealerOfferPrice: 28400,
+      quantity: 4,
+      deliveryTimeline: 'Immediate',
       availability: 'available',
-      description: 'Brand new 2024 Toyota Camry LE. Immediate delivery from Los Angeles showroom.',
-      images: [],
+      description: 'Brand new 2024 Toyota Camry LE. Immediate delivery from Los Angeles showroom with complimentary first service.',
+      images: ['https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=800&q=80'],
       createdAt: '2024-02-01T08:00:00Z',
       updatedAt: '2024-02-01T08:00:00Z',
     },
     {
       id: 'l2',
-      dealerId: 'd1',
+      dealerId: 'd1', // Premier Auto Group
       vehicleModelId: 'vm1',
       variantId: 'vv2',
-      price: 34850,
+      brand: 'Toyota',
+      model: 'Camry',
+      variant: 'XSE Hybrid',
+      year: 2024,
+      fuelType: 'Hybrid',
+      transmission: 'CVT',
       color: 'Wind Chill Pearl',
       mileage: 8,
       condition: 'new',
+      price: 34850,
+      exShowroomPrice: 32900,
+      onRoadPrice: 36500,
+      dealerOfferPrice: 34850,
+      quantity: 2,
+      deliveryTimeline: 'Within 7 days',
       availability: 'available',
-      description: 'Toyota Camry XSE Hybrid. Exceptional 47 MPG combined. Fully optioned.',
-      images: [],
+      description: 'Toyota Camry XSE Hybrid. Exceptional 47 MPG combined. Fully optioned with JBL audio and panoramic roof.',
+      images: ['https://images.unsplash.com/photo-1619767886558-efdc259cde1a?auto=format&fit=crop&w=800&q=80'],
       createdAt: '2024-02-01T08:00:00Z',
       updatedAt: '2024-02-01T08:00:00Z',
     },
     {
       id: 'l3',
-      dealerId: 'd2',
+      dealerId: 'd2', // City Cars Direct (SAME model as l1, but different price, delivery timeline & quantity!)
       vehicleModelId: 'vm1',
       variantId: 'vv1',
-      price: 27900,
+      brand: 'Toyota',
+      model: 'Camry',
+      variant: 'LE',
+      year: 2024,
+      fuelType: 'Petrol',
+      transmission: 'Automatic',
       color: 'Celestial Silver Metallic',
       mileage: 15,
       condition: 'new',
+      price: 27900, // City Cars is cheaper than Premier ($27,900 vs $28,400)
+      exShowroomPrice: 26320,
+      onRoadPrice: 29200,
+      dealerOfferPrice: 27900,
+      quantity: 1,
+      deliveryTimeline: 'Within 7 days',
       availability: 'available',
-      description: 'City Cars Direct price match guarantee! Ready for customer test drive.',
-      images: [],
+      description: 'City Cars Direct competitive price match! Ready for customer test drive at our San Francisco showroom.',
+      images: ['https://images.unsplash.com/photo-1590362891988-f77804702e0a?auto=format&fit=crop&w=800&q=80'],
       createdAt: '2024-02-02T08:00:00Z',
       updatedAt: '2024-02-02T08:00:00Z',
     },
     {
       id: 'l4',
-      dealerId: 'd2',
+      dealerId: 'd2', // City Cars Direct
       vehicleModelId: 'vm2',
       variantId: 'vv3',
-      price: 31500,
+      brand: 'Honda',
+      model: 'Accord',
+      variant: 'Sport',
+      year: 2024,
+      fuelType: 'Petrol',
+      transmission: 'CVT',
       color: 'Sonic Gray Pearl',
       mileage: 5,
       condition: 'new',
+      price: 31500,
+      exShowroomPrice: 29800,
+      onRoadPrice: 33100,
+      dealerOfferPrice: 31500,
+      quantity: 3,
+      deliveryTimeline: 'Immediate',
       availability: 'available',
-      description: 'Honda Accord Sport with wireless smartphone integration and 19-inch sport alloys.',
-      images: [],
+      description: 'Honda Accord Sport with wireless Apple CarPlay, 19-inch sport alloys and Honda Sensing driver assist.',
+      images: ['https://images.unsplash.com/photo-1592853625597-7d17be820d0c?auto=format&fit=crop&w=800&q=80'],
       createdAt: '2024-02-03T08:00:00Z',
       updatedAt: '2024-02-03T08:00:00Z',
     },
     {
       id: 'l5',
-      dealerId: 'd1',
+      dealerId: 'd1', // Premier Auto Group
       vehicleModelId: 'vm3',
       variantId: 'vv4',
-      price: 52400,
+      brand: 'Ford',
+      model: 'F-150',
+      variant: 'XLT SuperCrew',
+      year: 2024,
+      fuelType: 'Petrol',
+      transmission: 'Automatic',
       color: 'Atlas Blue Metallic',
       mileage: 22,
       condition: 'new',
-      availability: 'available',
-      description: 'Ford F-150 SuperCrew. 3.5L EcoBoost with max trailering pack and 2.4kW onboard power.',
-      images: [],
+      price: 52400,
+      exShowroomPrice: 49500,
+      onRoadPrice: 55000,
+      dealerOfferPrice: 52400,
+      quantity: 2,
+      deliveryTimeline: 'Within 15 days',
+      availability: 'reserved',
+      description: 'Ford F-150 SuperCrew with 3.5L EcoBoost, max trailering package and 2.4kW Pro Power Onboard.',
+      images: ['https://images.unsplash.com/photo-1583121274602-3e2820c69888?auto=format&fit=crop&w=800&q=80'],
       createdAt: '2024-02-04T08:00:00Z',
       updatedAt: '2024-02-04T08:00:00Z',
     },
     {
       id: 'l6',
-      dealerId: 'd2',
+      dealerId: 'd2', // City Cars Direct
       vehicleModelId: 'vm4',
       variantId: 'vv5',
-      price: 47990,
+      brand: 'Tesla',
+      model: 'Model Y',
+      variant: 'Long Range AWD',
+      year: 2024,
+      fuelType: 'Electric',
+      transmission: 'Single-Speed',
       color: 'Stealth Grey',
       mileage: 0,
       condition: 'new',
-      availability: 'available',
-      description: '2024 Tesla Model Y Long Range AWD. Eligible for clean vehicle tax credit.',
-      images: [],
+      price: 47990,
+      exShowroomPrice: 47990,
+      onRoadPrice: 51200,
+      dealerOfferPrice: 47990,
+      quantity: 0,
+      deliveryTimeline: 'Within 30 days',
+      availability: 'out_of_stock',
+      description: '2024 Tesla Model Y Long Range AWD. 310 miles EPA range with Autopilot and all-glass roof.',
+      images: ['https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=800&q=80'],
       createdAt: '2024-02-05T09:00:00Z',
       updatedAt: '2024-02-05T09:00:00Z',
     },
@@ -370,23 +440,6 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       expiryDate: '2024-02-28T23:59:59Z',
       createdAt: '2024-02-08T09:00:00Z',
       notes: 'Special incentive offer: $1,490 dealer discount plus complimentary ceramic coating.',
-    },
-    {
-      id: 'o2',
-      queueEntryId: 'q1',
-      customerId: 'u1',
-      customerName: 'Alice Johnson',
-      dealerId: 'd1',
-      dealerName: 'Premier Auto Group',
-      vehicleModelId: 'vm1',
-      vehicleName: 'Toyota Camry',
-      variantName: 'XSE Hybrid',
-      offeredPrice: 33900,
-      originalPrice: 34850,
-      status: 'pending',
-      expiryDate: '2024-02-25T23:59:59Z',
-      createdAt: '2024-02-09T14:00:00Z',
-      notes: 'Exclusive queue match pricing with 2 years of complimentary factory maintenance.',
     },
   ];
 
@@ -492,13 +545,19 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       if (filters?.availability) {
         result = result.filter(l => l.availability === filters.availability);
       }
+      if (filters?.brand) {
+        result = result.filter(l => l.brand.toLowerCase() === (filters.brand as string).toLowerCase());
+      }
+      if (filters?.model) {
+        result = result.filter(l => l.model.toLowerCase() === (filters.model as string).toLowerCase());
+      }
+      if (filters?.variant) {
+        result = result.filter(l => l.variant.toLowerCase() === (filters.variant as string).toLowerCase());
+      }
       const enriched = result.map(l => ({
         ...l,
         dealer: this._dealers.find(d => d.id === l.dealerId),
         vehicleModel: this._vehicleModels.find(m => m.id === l.vehicleModelId),
-        variant: this._vehicleModels
-          .find(m => m.id === l.vehicleModelId)
-          ?.variants.find(v => v.id === l.variantId),
       }));
       return { success: true, data: enriched };
     },
@@ -512,41 +571,104 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
           ...listing,
           dealer: this._dealers.find(d => d.id === listing.dealerId),
           vehicleModel: this._vehicleModels.find(m => m.id === listing.vehicleModelId),
-          variant: this._vehicleModels
-            .find(m => m.id === listing.vehicleModelId)
-            ?.variants.find(v => v.id === listing.variantId),
         },
       };
     },
 
-    create: async (data: Record<string, unknown>) => {
+    create: async (data: CreateVehicleListingData | Record<string, unknown>) => {
+      const raw = data as Record<string, unknown>;
+      const exShowroom = Number(raw.exShowroomPrice) || Number(raw.price) || 25000;
+      const dealerOffer = Number(raw.dealerOfferPrice) || Number(raw.price) || exShowroom;
+      const onRoad = Number(raw.onRoadPrice) || Math.round(exShowroom * 1.12);
+
+      const brand = (raw.brand as string) || (raw.make as string) || 'Toyota';
+      const model = (raw.model as string) || 'Camry';
+      const variant = (raw.variant as string) || 'Base';
+
       const newListing: VehicleListing = {
         id: `l${Date.now()}`,
-        dealerId: data.dealerId as string,
-        vehicleModelId: data.vehicleModelId as string,
-        variantId: (data.variantId as string) || '',
-        price: Number(data.price),
-        color: (data.color as string) || 'Standard',
+        dealerId: (raw.dealerId as string) || 'd1',
+        vehicleModelId: (raw.vehicleModelId as string) || 'vm1',
+        variantId: (raw.variantId as string) || 'vv1',
+        brand,
+        model,
+        variant,
+        year: Number(raw.year) || 2024,
+        fuelType: (data.fuelType as VehicleListing['fuelType']) || 'Petrol',
+        transmission: (data.transmission as VehicleListing['transmission']) || 'Automatic',
+        color: (data.color as string) || 'Alpine White',
         mileage: Number(data.mileage) || 0,
         condition: (data.condition as VehicleListing['condition']) || 'new',
-        availability: 'available',
-        description: data.description as string,
-        images: [],
+        price: dealerOffer,
+        exShowroomPrice: exShowroom,
+        onRoadPrice: onRoad,
+        dealerOfferPrice: dealerOffer,
+        quantity: typeof data.quantity === 'number' ? data.quantity : 1,
+        deliveryTimeline: (data.deliveryTimeline as VehicleListing['deliveryTimeline']) || 'Immediate',
+        availability: (data.availability as VehicleAvailabilityStatus) || 'available',
+        description: (data.description as string) || `${brand} ${model} ${variant} in brand new condition.`,
+        images: Array.isArray(data.images) && data.images.length > 0
+          ? data.images
+          : ['https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80'],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      this._listings.push(newListing);
+
+      this._listings.unshift(newListing);
       return { success: true, data: newListing };
     },
 
-    update: async (id: string, data: Record<string, unknown>) => {
+    update: async (id: string, data: UpdateVehicleListingData | Record<string, unknown>) => {
       const idx = this._listings.findIndex(l => l.id === id);
       if (idx === -1) return { success: false, error: 'Vehicle listing not found.' };
+
+      const current = this._listings[idx];
+      const updatedOfferPrice = data.dealerOfferPrice !== undefined
+        ? Number(data.dealerOfferPrice)
+        : data.price !== undefined
+        ? Number(data.price)
+        : current.dealerOfferPrice;
+
       this._listings[idx] = {
-        ...this._listings[idx],
+        ...current,
         ...data,
+        dealerOfferPrice: updatedOfferPrice,
+        price: updatedOfferPrice,
         updatedAt: new Date().toISOString(),
       };
+      return { success: true, data: this._listings[idx] };
+    },
+
+    updatePrice: async (
+      id: string,
+      prices: { exShowroomPrice?: number; onRoadPrice?: number; dealerOfferPrice: number }
+    ) => {
+      const idx = this._listings.findIndex(l => l.id === id);
+      if (idx === -1) return { success: false, error: 'Vehicle listing not found.' };
+
+      this._listings[idx].dealerOfferPrice = prices.dealerOfferPrice;
+      this._listings[idx].price = prices.dealerOfferPrice;
+      if (prices.exShowroomPrice !== undefined) {
+        this._listings[idx].exShowroomPrice = prices.exShowroomPrice;
+      }
+      if (prices.onRoadPrice !== undefined) {
+        this._listings[idx].onRoadPrice = prices.onRoadPrice;
+      }
+      this._listings[idx].updatedAt = new Date().toISOString();
+
+      return { success: true, data: this._listings[idx] };
+    },
+
+    updateAvailability: async (id: string, availability: VehicleAvailabilityStatus) => {
+      const idx = this._listings.findIndex(l => l.id === id);
+      if (idx === -1) return { success: false, error: 'Vehicle listing not found.' };
+
+      this._listings[idx].availability = availability;
+      if (availability === 'out_of_stock') {
+        this._listings[idx].quantity = 0;
+      }
+      this._listings[idx].updatedAt = new Date().toISOString();
+
       return { success: true, data: this._listings[idx] };
     },
 
@@ -625,9 +747,6 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
         .map(q => ({
           ...q,
           vehicleModel: this._vehicleModels.find(m => m.id === q.vehicleModelId),
-          variant: this._vehicleModels
-            .find(m => m.id === q.vehicleModelId)
-            ?.variants.find(v => v.id === q.variantId),
         }));
       return { success: true, data: userQueues };
     },
@@ -636,9 +755,6 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       const allQueues = this._queues.map(q => ({
         ...q,
         vehicleModel: this._vehicleModels.find(m => m.id === q.vehicleModelId),
-        variant: this._vehicleModels
-          .find(m => m.id === q.vehicleModelId)
-          ?.variants.find(v => v.id === q.variantId),
       }));
       return { success: true, data: allQueues };
     },

@@ -420,8 +420,8 @@ export const AdminDashboard: React.FC = () => {
                 {vehicles.map(v => (
                   <tr key={v.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
-                      <p className="font-semibold text-slate-900">{v.vehicleModel?.make} {v.vehicleModel?.model}</p>
-                      <p className="text-xs text-slate-500">{v.variant?.name}</p>
+                      <p className="font-semibold text-slate-900">{v.brand} {v.model}</p>
+                      <p className="text-xs text-slate-500">{v.variant}</p>
                     </td>
                     <td className="px-6 py-4 text-xs font-medium text-slate-700">
                       {v.dealer?.dealershipName}

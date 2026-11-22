@@ -11,6 +11,8 @@ export interface User {
   dealerProfile?: Dealer;
 }
 
+export type DealerVerificationStatus = 'pending' | 'approved' | 'rejected';
+
 export interface Dealer {
   id: string;
   userId: string;
@@ -24,10 +26,15 @@ export interface Dealer {
   state: string;
   pinCode: string;
   logoUrl?: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: DealerVerificationStatus;
   isVerified: boolean;
   createdAt: string;
 }
+
+export type FuelType = 'Petrol' | 'Diesel' | 'Electric' | 'Hybrid' | 'CNG';
+export type TransmissionType = 'Manual' | 'Automatic' | 'CVT' | 'DCT' | 'Single-Speed';
+export type DeliveryTimeline = 'Immediate' | 'Within 7 days' | 'Within 15 days' | 'Within 30 days' | '30+ days';
+export type VehicleAvailabilityStatus = 'available' | 'reserved' | 'out_of_stock' | 'sold';
 
 export interface VehicleVariant {
   id: string;
@@ -55,18 +62,66 @@ export interface VehicleListing {
   dealerId: string;
   vehicleModelId: string;
   variantId: string;
-  price: number;
+
+  // Manufacturer and specs
+  brand: string;
+  model: string;
+  variant: string;
+  year: number;
+  fuelType: FuelType;
+  transmission: TransmissionType;
   color: string;
   mileage: number;
   condition: 'new' | 'used' | 'certified';
-  availability: 'available' | 'reserved' | 'sold';
-  description?: string;
+
+  // Pricing
+  price: number; // primary effective price (dealer offer price)
+  exShowroomPrice: number;
+  onRoadPrice: number;
+  dealerOfferPrice: number;
+
+  // Inventory & Delivery
+  quantity: number;
+  deliveryTimeline: DeliveryTimeline;
+  availability: VehicleAvailabilityStatus;
+
+  // Details & Media
+  description: string;
   images: string[];
+
   createdAt: string;
   updatedAt: string;
+
   dealer?: Dealer;
   vehicleModel?: VehicleModel;
-  variant?: VehicleVariant;
+  variantDetails?: VehicleVariant;
+}
+
+export interface CreateVehicleListingData {
+  dealerId: string;
+  vehicleModelId?: string;
+  variantId?: string;
+  brand: string;
+  model: string;
+  variant: string;
+  year: number;
+  fuelType: FuelType;
+  transmission: TransmissionType;
+  color: string;
+  mileage?: number;
+  condition?: 'new' | 'used' | 'certified';
+  exShowroomPrice: number;
+  onRoadPrice: number;
+  dealerOfferPrice: number;
+  quantity: number;
+  deliveryTimeline: DeliveryTimeline;
+  availability?: VehicleAvailabilityStatus;
+  description?: string;
+  images?: string[];
+}
+
+export interface UpdateVehicleListingData extends Partial<CreateVehicleListingData> {
+  price?: number;
 }
 
 export interface QueueEntry {

@@ -22,6 +22,10 @@ const electronAPI = {
       ipcRenderer.invoke('vehicles:create', data),
     update: (id: string, data: Record<string, unknown>) =>
       ipcRenderer.invoke('vehicles:update', id, data),
+    updatePrice: (id: string, prices: { exShowroomPrice?: number; onRoadPrice?: number; dealerOfferPrice: number }) =>
+      ipcRenderer.invoke('vehicles:updatePrice', id, prices),
+    updateAvailability: (id: string, availability: string) =>
+      ipcRenderer.invoke('vehicles:updateAvailability', id, availability),
     delete: (id: string) => ipcRenderer.invoke('vehicles:delete', id),
   },
 

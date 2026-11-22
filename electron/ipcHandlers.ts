@@ -43,6 +43,14 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return adapter.vehicles.update(id, data);
   });
 
+  ipcMain.handle('vehicles:updatePrice', async (_event, id: string, prices: { exShowroomPrice?: number; onRoadPrice?: number; dealerOfferPrice: number }) => {
+    return adapter.vehicles.updatePrice(id, prices);
+  });
+
+  ipcMain.handle('vehicles:updateAvailability', async (_event, id: string, availability) => {
+    return adapter.vehicles.updateAvailability(id, availability);
+  });
+
   ipcMain.handle('vehicles:delete', async (_event, id: string) => {
     return adapter.vehicles.delete(id);
   });

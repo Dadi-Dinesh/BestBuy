@@ -8,6 +8,7 @@ import { MainLayout } from './components/layout/MainLayout';
 import { CustomerDashboard } from './pages/dashboard/CustomerDashboard';
 import { DealerDashboard } from './pages/dashboard/DealerDashboard';
 import { AdminDashboard } from './pages/dashboard/AdminDashboard';
+import { DealershipProfilePage } from './pages/dealer/DealershipProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useAuthStore } from './store/authStore';
 import type { UserRole } from './types';
@@ -87,7 +88,7 @@ function App() {
             path="dealership"
             element={
               <RequireAuth allowedRoles={['dealer']}>
-                <DealerDashboard />
+                <DealershipProfilePage />
               </RequireAuth>
             }
           />

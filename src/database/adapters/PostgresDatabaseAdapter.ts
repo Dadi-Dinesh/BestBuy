@@ -9,18 +9,11 @@ import {
   Offer,
   ApiResponse,
   RegisterData,
+  CreateVehicleListingData,
+  UpdateVehicleListingData,
+  VehicleAvailabilityStatus,
 } from '../../types';
 
-/**
- * Production PostgreSQL Adapter Skeleton.
- * 
- * To activate:
- * 1. Install driver: `npm install pg @types/pg`
- * 2. Set environment variables in .env:
- *    DATA_ADAPTER=postgres
- *    DATABASE_URL=postgresql://user:password@localhost:5432/bestbuy_db
- * 3. Replace the placeholder methods below with your actual query/ORM calls.
- */
 export class PostgresDatabaseAdapter implements IDatabaseAdapter {
   readonly name = 'PostgresDatabaseAdapter';
   private config: DatabaseConfig;
@@ -68,10 +61,16 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
     getById: async (_id: string): Promise<ApiResponse<VehicleListing>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
-    create: async (_data: Record<string, unknown>): Promise<ApiResponse<VehicleListing>> => {
+    create: async (_data: CreateVehicleListingData | Record<string, unknown>): Promise<ApiResponse<VehicleListing>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
-    update: async (_id: string, _data: Record<string, unknown>): Promise<ApiResponse<VehicleListing>> => {
+    update: async (_id: string, _data: UpdateVehicleListingData | Record<string, unknown>): Promise<ApiResponse<VehicleListing>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
+    updatePrice: async (_id: string, _prices: { exShowroomPrice?: number; onRoadPrice?: number; dealerOfferPrice: number }): Promise<ApiResponse<VehicleListing>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
+    updateAvailability: async (_id: string, _availability: VehicleAvailabilityStatus): Promise<ApiResponse<VehicleListing>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
     delete: async (_id: string): Promise<ApiResponse<{ id: string }>> => {

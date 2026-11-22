@@ -7,6 +7,9 @@ import {
   Offer,
   ApiResponse,
   RegisterData,
+  CreateVehicleListingData,
+  UpdateVehicleListingData,
+  VehicleAvailabilityStatus,
 } from '../types';
 
 export interface AdminStats {
@@ -33,8 +36,10 @@ export interface IDatabaseAdapter {
   vehicles: {
     getAll(filters?: Record<string, unknown>): Promise<ApiResponse<VehicleListing[]>>;
     getById(id: string): Promise<ApiResponse<VehicleListing>>;
-    create(data: Record<string, unknown>): Promise<ApiResponse<VehicleListing>>;
-    update(id: string, data: Record<string, unknown>): Promise<ApiResponse<VehicleListing>>;
+    create(data: CreateVehicleListingData | Record<string, unknown>): Promise<ApiResponse<VehicleListing>>;
+    update(id: string, data: UpdateVehicleListingData | Record<string, unknown>): Promise<ApiResponse<VehicleListing>>;
+    updatePrice(id: string, prices: { exShowroomPrice?: number; onRoadPrice?: number; dealerOfferPrice: number }): Promise<ApiResponse<VehicleListing>>;
+    updateAvailability(id: string, availability: VehicleAvailabilityStatus): Promise<ApiResponse<VehicleListing>>;
     delete(id: string): Promise<ApiResponse<{ id: string }>>;
   };
 
