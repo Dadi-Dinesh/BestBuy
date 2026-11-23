@@ -1,3 +1,5 @@
+import type { PriceChange } from '../services/pricingService';
+
 export type UserRole = 'customer' | 'dealer' | 'admin';
 
 export interface User {
@@ -58,6 +60,7 @@ export interface VehicleModel {
 }
 
 export interface VehicleListing {
+  priceHistory?: PriceChange[];
   id: string;
   dealerId: string;
   vehicleModelId: string;
@@ -125,6 +128,7 @@ export interface UpdateVehicleListingData extends Partial<CreateVehicleListingDa
 }
 
 export interface QueueEntry {
+  city?: string;
   id: string;
   vehicleModelId: string;
   variantId: string;
@@ -146,15 +150,35 @@ export interface Offer {
   customerName?: string;
   dealerId: string;
   dealerName?: string;
-  vehicleModelId: string;
+  listingId?: string;
+  vehicleModelId?: string;
   vehicleName: string;
-  variantName?: string;
+  variantName: string;
+  color?: string;
+  availability?: string;
+  expectedDeliveryDate?: string;
   offeredPrice: number;
   originalPrice: number;
   status: 'pending' | 'accepted' | 'declined' | 'expired';
   expiryDate: string;
   createdAt: string;
   notes?: string;
+  terms?: string;
+}
+
+export type BookingStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'payment_pending'
+  | 'booked'
+  | 'cancelled'
+  | 'expired'
+  | 'completed';
+
+export interface BookingStatusHistoryItem {
+  status: BookingStatus;
+  timestamp: string;
+  note?: string;
 }
 
 export interface Booking {
@@ -164,19 +188,31 @@ export interface Booking {
   customerPhone?: string;
   listingId: string;
   dealerId: string;
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+  offerId?: string;
+  status: BookingStatus;
   bookingDate: string;
+  lockedPrice: number;
+  lockDurationHours: number;
+  priceLockedUntil: string;
+  vehicleName?: string;
+  variantName?: string;
+  color?: string;
   notes?: string;
+  statusHistory?: BookingStatusHistoryItem[];
+  createdAt?: string;
+  updatedAt?: string;
   listing?: VehicleListing;
   dealer?: Dealer;
 }
 
 export interface Notification {
   id: string;
-  userId: string;
+  userId?: string;
   title: string;
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
+  category?: 'offer' | 'booking' | 'queue' | 'system';
+  linkTo?: string;
   isRead: boolean;
   createdAt: string;
 }

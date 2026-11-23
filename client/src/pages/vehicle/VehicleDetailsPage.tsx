@@ -1,3 +1,4 @@
+import { ListingPriceChange } from '../../components/demand/ListingPriceChange';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
@@ -52,6 +53,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
   const [matchingDealers, setMatchingDealers] = useState<VehicleListing[]>([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [bookingError, setBookingError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // Modals state
@@ -112,8 +114,9 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
     setIsJoiningQueue(true);
     const res = await queueService.join({
       customerId: user.id,
-      vehicleModelId: listing.vehicleModelId || 'vm1',
-      variantId: listing.variantId || 'vv1',
+      vehicleModelId: listing.vehicleModelId,
+      variantId: listing.variantId,
+      city: listing.dealer?.city,
     });
     setIsJoiningQueue(false);
     setShowQueueModal(false);
@@ -130,17 +133,29 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
     e.preventDefault();
     if (!bookingDealerListing || !user) return;
     setIsSubmittingBooking(true);
+    setBookingError(null);
 
     const res = await bookingService.create({
       customerId: user.id,
       dealerId: bookingDealerListing.dealerId,
       listingId: bookingDealerListing.id,
+      lockedPrice: bookingDealerListing.dealerOfferPrice,
+      bookingDate,
       notes: bookingNotes || `Showroom visit & test drive scheduled for ${formatDate(bookingDate)}.`,
     });
 
     setIsSubmittingBooking(false);
     setBookingDealerListing(null);
 
+    if (!res.success) {
+      setBookingError(res.error || 'The booking could not be created.');
+      const updated = await vehicleService.getById(bookingDealerListing.id);
+      if (updated.success && updated.data) {
+        const listing = updated.data;
+        setMatchingDealers(previous => previous.map(item => item.id === listing.id ? listing : item));
+        setListing(previous => previous?.id === listing.id ? listing : previous);
+      }
+    }
     if (res.success) {
       setActionSuccess(
         `Showroom visit confirmed with ${bookingDealerListing.dealer?.dealershipName || 'dealership'}!`
@@ -201,6 +216,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
           <span className="font-semibold text-slate-800">{listing.variant}</span>
         </div>
 
+        {bookingError && <p role="alert" className="text-sm text-red-700">{bookingError}</p>}
         {actionSuccess && (
           <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-lg flex items-center gap-2">
             <CheckCircle2 size={14} />
@@ -332,6 +348,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                   </span>
                 )}
               </div>
+              <ListingPriceChange listing={listing} />
             </div>
 
             {/* Showing selected dealer info */}
@@ -502,6 +519,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                         <p className="text-base font-extrabold text-slate-900">
                           {formatCurrency(dealerListing.dealerOfferPrice)}
                         </p>
+                        <ListingPriceChange listing={dealerListing} />
                         {isLowest ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600">
                             <Award size={12} /> Cheapest Offer

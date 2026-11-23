@@ -1,3 +1,6 @@
+import { DemandBadge, MarketMonitoring, useMarketData } from '../../components/demand/MarketMonitoring';
+import { cityKey, isActiveQueue, marketKey } from '../../services/demandService';
+import { pricingService } from '../../../../src/services/pricingService';
 import React, { useState, useEffect } from 'react';
 import {
   Car,
@@ -49,7 +52,8 @@ export const DealerDashboard: React.FC = () => {
   const dealerId = user?.dealerProfile?.id || 'd1';
 
   // Navigation tab inside dashboard
-  const [activeTab, setActiveTab] = useState<'inventory' | 'add-vehicle' | 'queues' | 'offers' | 'bookings'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'add-vehicle' | 'queues' | 'offers' | 'bookings' | 'demand'>('inventory');
+  const monitor = useMarketData();
 
   // Inventory data
   const [listings, setListings] = useState<VehicleListing[]>([]);
@@ -97,6 +101,7 @@ export const DealerDashboard: React.FC = () => {
 
   // Make Offer Modal State
   const [selectedQueue, setSelectedQueue] = useState<QueueEntry | null>(null);
+  const [offerListingId, setOfferListingId] = useState('');
   const [offerPrice, setOfferPrice] = useState('');
   const [offerNotes, setOfferNotes] = useState('');
 
@@ -164,6 +169,7 @@ export const DealerDashboard: React.FC = () => {
 
     const res = await vehicleService.create(payload);
     if (res.success && res.data) {
+      monitor.refresh();
       setListings(prev => [res.data as VehicleListing, ...prev]);
       setFeedback({ type: 'success', message: `Vehicle "${addBrand} ${addModel} ${addVariant}" successfully added to your inventory!` });
       setTimeout(() => setFeedback(null), 3500);
@@ -204,6 +210,7 @@ export const DealerDashboard: React.FC = () => {
     });
 
     if (res.success && res.data) {
+      monitor.refresh();
       setListings(prev => prev.map(l => (l.id === priceModalListing.id ? (res.data as VehicleListing) : l)));
       setPriceModalListing(null);
       setFeedback({ type: 'success', message: 'Pricing updated successfully.' });
@@ -215,6 +222,7 @@ export const DealerDashboard: React.FC = () => {
   const handleUpdateAvailability = async (id: string, newStatus: VehicleAvailabilityStatus) => {
     const res = await vehicleService.updateAvailability(id, newStatus);
     if (res.success && res.data) {
+      monitor.refresh();
       setListings(prev => prev.map(l => (l.id === id ? (res.data as VehicleListing) : l)));
       setFeedback({ type: 'success', message: `Vehicle status changed to ${newStatus.replace('_', ' ')}.` });
       setTimeout(() => setFeedback(null), 3000);
@@ -227,6 +235,7 @@ export const DealerDashboard: React.FC = () => {
 
     const res = await vehicleService.delete(id);
     if (res.success) {
+      monitor.refresh();
       setListings(prev => prev.filter(l => l.id !== id));
       setFeedback({ type: 'success', message: 'Vehicle deleted from your inventory.' });
       setTimeout(() => setFeedback(null), 3000);
@@ -240,6 +249,7 @@ export const DealerDashboard: React.FC = () => {
 
     const res = await vehicleService.update(editingListing.id, editingListing);
     if (res.success && res.data) {
+      monitor.refresh();
       setListings(prev => prev.map(l => (l.id === editingListing.id ? (res.data as VehicleListing) : l)));
       setEditingListing(null);
       setFeedback({ type: 'success', message: 'Vehicle details updated successfully.' });
@@ -247,10 +257,17 @@ export const DealerDashboard: React.FC = () => {
     }
   };
 
+  const matchingListings = (queue: QueueEntry) => listings.filter(listing =>
+    listing.vehicleModelId === queue.vehicleModelId && (!queue.variantId || listing.variantId === queue.variantId) &&
+    (!queue.city || cityKey(listing.dealer?.city) === cityKey(queue.city))
+  );
+
   // Handle Send Direct Offer to Queue Member
   const handleSendOffer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedQueue || !offerPrice) return;
+    if (!selectedQueue || !pricingService.isValid(Number(offerPrice))) return;
+    const listing = matchingListings(selectedQueue).find(item => item.id === offerListingId);
+    if (!listing) return;
 
     const res = await offerService.create({
       queueEntryId: selectedQueue.id,
@@ -259,16 +276,19 @@ export const DealerDashboard: React.FC = () => {
       dealerId,
       dealerName: user?.dealerProfile?.dealershipName || 'Premier Auto Group',
       vehicleModelId: selectedQueue.vehicleModelId,
-      vehicleName: `${selectedQueue.vehicleModel?.make} ${selectedQueue.vehicleModel?.model}`,
-      variantName: selectedQueue.variant?.name || 'Exclusive Allocation',
+      listingId: listing.id,
+      vehicleName: `${listing.brand} ${listing.model}`,
+      variantName: listing.variant,
+      color: listing.color,
       offeredPrice: Number(offerPrice),
-      originalPrice: Number(offerPrice) + 1500,
+      originalPrice: pricingService.current(listing),
       status: 'pending',
       expiryDate: new Date(Date.now() + 7 * 86400000).toISOString(),
       notes: offerNotes || 'Exclusive dealer priority offer with immediate allocation guarantee.',
     });
 
     if (res.success && res.data) {
+      monitor.refresh();
       setOffers(prev => [res.data as Offer, ...prev]);
       setSelectedQueue(null);
       setOfferPrice('');
@@ -502,9 +522,14 @@ export const DealerDashboard: React.FC = () => {
           <Calendar size={15} />
           Bookings ({bookings.length})
         </button>
+        <button onClick={() => setActiveTab('demand')} className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider border-b-2 ${activeTab === 'demand' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>
+          Demand Trends
+        </button>
       </div>
 
       {/* TAB 1: INVENTORY MANAGEMENT DASHBOARD & SEARCH/FILTERS */}
+      {activeTab === 'demand' && <MarketMonitoring monitor={monitor} dealerId={dealerId} />}
+
       {activeTab === 'inventory' && (
         <div className="space-y-4">
           {/* Search and Cascading Filter Controls */}
@@ -667,6 +692,8 @@ export const DealerDashboard: React.FC = () => {
                             <p className="font-bold text-sm text-slate-900">
                               Offer: {formatCurrency(v.dealerOfferPrice || v.price)}
                             </p>
+                            {monitor.markets.filter(market => market.key === marketKey(v.vehicleModelId, v.variantId, v.dealer?.city))
+                              .map(market => <DemandBadge key={market.key} market={market} />)}
                             <p className="text-slate-400 text-[11px]">
                               Ex-Showroom: {formatCurrency(v.exShowroomPrice || v.price)}
                             </p>
@@ -984,8 +1011,10 @@ export const DealerDashboard: React.FC = () => {
 
                 <Button
                   size="sm"
+                  disabled={!isActiveQueue(q) || !matchingListings(q).length}
                   onClick={() => {
                     setSelectedQueue(q);
+                    setOfferListingId(matchingListings(q)[0]?.id ?? '');
                     setOfferPrice('');
                   }}
                   leftIcon={<Send size={14} />}
@@ -1238,6 +1267,13 @@ export const DealerDashboard: React.FC = () => {
                   {selectedQueue.vehicleModel?.make} {selectedQueue.vehicleModel?.model} ({selectedQueue.variant?.name || 'Waitlist'})
                 </span>
               </div>
+
+              <label className="block text-sm font-semibold text-slate-700">
+                Dealer listing
+                <select value={offerListingId} onChange={event => setOfferListingId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2" required>
+                  {matchingListings(selectedQueue).map(listing => <option key={listing.id} value={listing.id}>{listing.variant} · {listing.color} · Listed at {formatCurrency(pricingService.current(listing))}</option>)}
+                </select>
+              </label>
 
               <Input
                 label="Offer Price (USD)"

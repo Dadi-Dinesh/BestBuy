@@ -1,3 +1,6 @@
+import { resolveVehicleIdentity } from '../../services/vehicleIdentity';
+import { demandFixtures } from '../../data/demandFixtures';
+import { pricingService, type ListingPriceChange } from '../../services/pricingService';
 import { IDatabaseAdapter, AdminStats } from '../IDatabaseAdapter';
 import {
   User,
@@ -706,8 +709,10 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
   ];
 
   private _queues: QueueEntry[] = [
+    ...demandFixtures().queues,
     {
       id: 'q1',
+      city: 'Los Angeles',
       vehicleModelId: 'vm1',
       variantId: 'vv2',
       customerId: 'u1',
@@ -715,10 +720,11 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       customerPhone: '+1 (555) 234-5678',
       position: 2,
       status: 'waiting',
-      createdAt: '2024-02-05T10:15:00Z',
+      createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
     },
     {
       id: 'q2',
+      city: 'San Francisco',
       vehicleModelId: 'vm4',
       variantId: 'vv5',
       customerId: 'u1',
@@ -726,10 +732,11 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       customerPhone: '+1 (555) 234-5678',
       position: 1,
       status: 'offered',
-      createdAt: '2024-02-06T14:30:00Z',
+      createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
     },
     {
       id: 'q3',
+      city: 'Los Angeles',
       vehicleModelId: 'vm1',
       variantId: 'vv1',
       customerId: 'u6',
@@ -737,11 +744,12 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       customerPhone: '+1 (555) 778-9900',
       position: 1,
       status: 'waiting',
-      createdAt: '2024-02-07T11:20:00Z',
+      createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
     },
   ];
 
   private _offers: Offer[] = [
+    ...demandFixtures().offers,
     {
       id: 'o1',
       queueEntryId: 'q2',
@@ -752,16 +760,42 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       vehicleModelId: 'vm4',
       vehicleName: 'Tesla Model Y',
       variantName: 'Long Range AWD',
+      color: 'Stealth Grey',
+      availability: 'In Stock (Allocation #TY-44)',
+      expectedDeliveryDate: new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
       offeredPrice: 46500,
       originalPrice: 47990,
       status: 'pending',
-      expiryDate: '2024-02-28T23:59:59Z',
-      createdAt: '2024-02-08T09:00:00Z',
-      notes: 'Special incentive offer: $1,490 dealer discount plus complimentary ceramic coating.',
+      expiryDate: new Date(Date.now() + 86400000 * 5).toISOString(),
+      createdAt: new Date(Date.now() - 3600000 * 3).toISOString(),
+      notes: 'Queue priority offer: $1,490 dealer incentive discount.',
+      terms: 'Offer price valid for 5 days. Includes complimentary ceramic paint coating and 1st year mobile charger.',
+    },
+    {
+      id: 'o2',
+      queueEntryId: 'q1',
+      customerId: 'u1',
+      customerName: 'Alice Johnson',
+      dealerId: 'd1',
+      dealerName: 'Premier Auto Group',
+      vehicleModelId: 'vm1',
+      vehicleName: 'Toyota Camry',
+      variantName: 'XSE Hybrid',
+      color: 'Wind Chill Pearl',
+      availability: 'In Stock (2 units)',
+      expectedDeliveryDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+      offeredPrice: 33900,
+      originalPrice: 34850,
+      status: 'pending',
+      expiryDate: new Date(Date.now() + 86400000 * 4).toISOString(),
+      createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
+      notes: 'Exclusive queue match pricing with immediate showroom delivery.',
+      terms: 'Price includes destination fee and 2 years complimentary factory scheduled maintenance.',
     },
   ];
 
   private _bookings: Booking[] = [
+    ...demandFixtures().bookings,
     {
       id: 'b1',
       customerId: 'u1',
@@ -770,7 +804,14 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       listingId: 'l1',
       dealerId: 'd1',
       status: 'confirmed',
-      bookingDate: '2024-02-15T10:00:00Z',
+      bookingDate: new Date(Date.now() + 86400000 * 2).toISOString(),
+      lockedPrice: 28400,
+      lockDurationHours: 72,
+      priceLockedUntil: new Date(Date.now() + 86400000 * 3).toISOString(),
+      vehicleName: 'Toyota Camry',
+      variantName: 'LE',
+      color: 'Midnight Black Metallic',
+      createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
       notes: 'Test drive scheduled for Midnight Black Camry LE at LA showroom.',
     },
   ];
@@ -854,7 +895,16 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     },
   };
 
+  private archivedPriceChanges: ListingPriceChange[] = [];
+
   vehicles = {
+    getPriceChanges: async () => ({
+      success: true,
+      data: [...this.archivedPriceChanges, ...this._listings.flatMap(listing => pricingService.listingChanges({
+        ...listing, dealer: this._dealers.find(dealer => dealer.id === listing.dealerId),
+      }))],
+    }),
+
     getAll: async (filters?: Record<string, unknown>) => {
       let result = [...this._listings];
       if (filters?.dealerId) {
@@ -903,11 +953,15 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       const model = (raw.model as string) || 'Camry';
       const variant = (raw.variant as string) || 'Base';
 
+      if (!pricingService.isValid(dealerOffer)) return { success: false, error: 'Enter a valid positive dealer price.' };
+      const dealerId = (raw.dealerId as string) || 'd1';
       const newListing: VehicleListing = {
         id: `l${Date.now()}`,
-        dealerId: (raw.dealerId as string) || 'd1',
-        vehicleModelId: (raw.vehicleModelId as string) || 'vm1',
-        variantId: (raw.variantId as string) || 'vv1',
+        dealerId,
+        dealer: this._dealers.find(dealer => dealer.id === dealerId),
+        ...resolveVehicleIdentity({
+          brand, model, variant, vehicleModelId: raw.vehicleModelId as string, variantId: raw.variantId as string,
+        }, this._listings),
         brand,
         model,
         variant,
@@ -947,14 +1001,15 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
         ? Number(data.price)
         : current.dealerOfferPrice;
 
+      if (!pricingService.isValid(updatedOfferPrice)) return { success: false, error: 'Enter a valid positive dealer price.' };
+
       this._listings[idx] = {
         ...current,
         ...data,
-        dealerOfferPrice: updatedOfferPrice,
-        price: updatedOfferPrice,
+        ...pricingService.revise(current, updatedOfferPrice, new Date().toISOString()),
         updatedAt: new Date().toISOString(),
       };
-      return { success: true, data: this._listings[idx] };
+      return { success: true, data: { ...this._listings[idx], dealer: this._dealers.find(dealer => dealer.id === this._listings[idx].dealerId) } };
     },
 
     updatePrice: async (
@@ -964,17 +1019,18 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       const idx = this._listings.findIndex(l => l.id === id);
       if (idx === -1) return { success: false, error: 'Vehicle listing not found.' };
 
-      this._listings[idx].dealerOfferPrice = prices.dealerOfferPrice;
-      this._listings[idx].price = prices.dealerOfferPrice;
-      if (prices.exShowroomPrice !== undefined) {
-        this._listings[idx].exShowroomPrice = prices.exShowroomPrice;
-      }
-      if (prices.onRoadPrice !== undefined) {
-        this._listings[idx].onRoadPrice = prices.onRoadPrice;
-      }
-      this._listings[idx].updatedAt = new Date().toISOString();
+      if (!pricingService.isValid(prices.dealerOfferPrice)) return { success: false, error: 'Enter a valid positive dealer price.' };
+      const current = this._listings[idx];
+      const updatedAt = new Date().toISOString();
+      this._listings[idx] = {
+        ...current,
+        ...pricingService.revise(current, prices.dealerOfferPrice, updatedAt),
+        exShowroomPrice: prices.exShowroomPrice ?? current.exShowroomPrice,
+        onRoadPrice: prices.onRoadPrice ?? current.onRoadPrice,
+        updatedAt,
+      };
 
-      return { success: true, data: this._listings[idx] };
+      return { success: true, data: { ...this._listings[idx], dealer: this._dealers.find(dealer => dealer.id === this._listings[idx].dealerId) } };
     },
 
     updateAvailability: async (id: string, availability: VehicleAvailabilityStatus) => {
@@ -987,13 +1043,16 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       }
       this._listings[idx].updatedAt = new Date().toISOString();
 
-      return { success: true, data: this._listings[idx] };
+      return { success: true, data: { ...this._listings[idx], dealer: this._dealers.find(dealer => dealer.id === this._listings[idx].dealerId) } };
     },
 
     delete: async (id: string) => {
       const idx = this._listings.findIndex(l => l.id === id);
       if (idx === -1) return { success: false, error: 'Vehicle listing not found.' };
-      this._listings.splice(idx, 1);
+      const [listing] = this._listings.splice(idx, 1);
+      this.archivedPriceChanges.push(...pricingService.listingChanges({
+        ...listing, dealer: this._dealers.find(dealer => dealer.id === listing.dealerId),
+      }));
       return { success: true, data: { id } };
     },
   };
@@ -1026,15 +1085,18 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
   };
 
   queue = {
-    join: async (data: { vehicleModelId: string; customerId: string; variantId?: string }) => {
+    join: async (data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string }) => {
       const position = this._queues.filter(
-        q => q.vehicleModelId === data.vehicleModelId && q.status === 'waiting'
+        q => q.vehicleModelId === data.vehicleModelId && q.variantId === (data.variantId || '') &&
+        q.city?.trim().toLowerCase() === data.city?.trim().toLowerCase() &&
+        (q.status === 'waiting' || q.status === 'offered')
       ).length + 1;
       const customer = this._users.find(u => u.id === data.customerId);
       const entry: QueueEntry = {
         id: `q${Date.now()}`,
         vehicleModelId: data.vehicleModelId,
         variantId: data.variantId || '',
+        city: data.city,
         customerId: data.customerId,
         customerName: customer?.name || 'Customer',
         customerPhone: customer?.phoneNumber,
@@ -1079,6 +1141,40 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
   };
 
   offers = {
+    accept: async (id: string, lockDurationHours: number): Promise<ApiResponse<{ offer: Offer; bookingId: string }>> => {
+      const offer = this._offers.find(item => item.id === id);
+      if (!offer?.listingId || offer.status !== 'pending' || !(Date.parse(offer.expiryDate) > Date.now())) {
+        return { success: false, error: 'This offer is no longer available.' };
+      }
+      if (![24, 48, 72, 168].includes(lockDurationHours)) {
+        return { success: false, error: 'Select a supported price lock duration.' };
+      }
+
+      const now = Date.now();
+      const booking: Booking = {
+        id: `booking-${offer.id}`,
+        offerId: offer.id,
+        customerId: offer.customerId,
+        customerName: offer.customerName,
+        listingId: offer.listingId,
+        dealerId: offer.dealerId,
+        vehicleName: offer.vehicleName,
+        variantName: offer.variantName,
+        color: offer.color,
+        status: 'pending',
+        lockedPrice: offer.offeredPrice,
+        lockDurationHours,
+        priceLockedUntil: new Date(now + lockDurationHours * 3_600_000).toISOString(),
+        createdAt: new Date(now).toISOString(),
+        bookingDate: new Date(now + 2 * 86_400_000).toISOString(),
+      };
+      this._bookings.unshift(booking);
+      offer.status = 'accepted';
+      const queue = this._queues.find(item => item.id === offer.queueEntryId);
+      if (queue && (queue.status === 'waiting' || queue.status === 'offered')) queue.status = 'booked';
+      return { success: true, data: { offer, bookingId: booking.id } };
+    },
+
     getAll: async () => {
       return { success: true, data: [...this._offers] };
     },
@@ -1098,8 +1194,13 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     },
 
     create: async (data: Omit<Offer, 'id' | 'createdAt'>) => {
+      const listing = this._listings.find(item => item.id === data.listingId && item.dealerId === data.dealerId);
+      if (!listing || !pricingService.isValid(data.offeredPrice)) {
+        return { success: false, error: 'Select a dealer listing and enter a valid offer price.' };
+      }
       const newOffer: Offer = {
         ...data,
+        originalPrice: pricingService.current(listing),
         id: `o${Date.now()}`,
         createdAt: new Date().toISOString(),
       };
@@ -1110,6 +1211,9 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     updateStatus: async (id: string, status: Offer['status']) => {
       const offer = this._offers.find(o => o.id === id);
       if (!offer) return { success: false, error: 'Offer not found.' };
+      if (offer.status !== 'pending' || status === 'accepted') {
+        return { success: false, error: 'This offer status cannot be changed.' };
+      }
       offer.status = status;
       return { success: true, data: offer };
     },
@@ -1125,7 +1229,14 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       return { success: true, data: enriched };
     },
 
-    create: async (data: { customerId: string; listingId: string; dealerId: string; notes?: string }) => {
+    create: async (data: { customerId: string; listingId: string; dealerId: string; notes?: string; lockedPrice?: number; bookingDate?: string }) => {
+      const listing = this._listings.find(item => item.id === data.listingId && item.dealerId === data.dealerId);
+      if (!listing) return { success: false, error: 'Vehicle listing not found.' };
+      const lockedPrice = pricingService.current(listing);
+      if (data.lockedPrice !== undefined && data.lockedPrice !== lockedPrice) {
+        return { success: false, error: 'The dealer price changed. Review the current listing price before booking.' };
+      }
+      const now = Date.now();
       const customer = this._users.find(u => u.id === data.customerId);
       const booking: Booking = {
         id: `b${Date.now()}`,
@@ -1135,9 +1246,16 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
         listingId: data.listingId,
         dealerId: data.dealerId,
         status: 'pending',
-        bookingDate: new Date().toISOString(),
+        bookingDate: data.bookingDate || new Date(now).toISOString(),
+        createdAt: new Date(now).toISOString(),
+        lockedPrice,
+        lockDurationHours: 72,
+        priceLockedUntil: new Date(now + 72 * 3_600_000).toISOString(),
+        vehicleName: `${listing.brand} ${listing.model}`,
+        variantName: listing.variant,
+        color: listing.color,
         notes: data.notes,
-        listing: this._listings.find(l => l.id === data.listingId),
+        listing,
         dealer: this._dealers.find(d => d.id === data.dealerId),
       };
       this._bookings.push(booking);

@@ -1,3 +1,6 @@
+import { resolveVehicleIdentity } from '../../../src/services/vehicleIdentity';
+import { dealerService } from './dealerService';
+import { pricingService, type ListingPriceChange } from '../../../src/services/pricingService';
 import {
   ApiResponse,
   VehicleListing,
@@ -731,7 +734,17 @@ let mockBrowserVehicles: VehicleListing[] = [
   },
 ];
 
+const archivedPriceChanges: ListingPriceChange[] = [];
+
 export const vehicleService = {
+  async getPriceChanges(): Promise<ApiResponse<ListingPriceChange[]>> {
+    const api = getAPI();
+    if (api?.vehicles?.getPriceChanges) {
+      return api.vehicles.getPriceChanges() as Promise<ApiResponse<ListingPriceChange[]>>;
+    }
+    return { success: true, data: [...archivedPriceChanges, ...mockBrowserVehicles.flatMap(pricingService.listingChanges)] };
+  },
+
   async getAll(filters?: Record<string, unknown>): Promise<ApiResponse<VehicleListing[]>> {
     const api = getAPI();
     if (api?.vehicles?.getAll) {
@@ -778,14 +791,22 @@ export const vehicleService = {
     const dealerOffer = Number(data.dealerOfferPrice) || exShowroom;
     const onRoad = Number(data.onRoadPrice) || Math.round(exShowroom * 1.12);
 
+    const dealerId = data.dealerId as string;
+    const { data: dealer } = await dealerService.getById(dealerId);
+    const brand = (data.brand as string) || 'Toyota';
+    const model = (data.model as string) || 'Camry';
+    const variant = (data.variant as string) || 'Base';
+    if (!pricingService.isValid(dealerOffer)) return { success: false, error: 'Enter a valid positive dealer price.' };
     const newListing: VehicleListing = {
       id: `l${Date.now()}`,
-      dealerId: data.dealerId as string,
-      vehicleModelId: (data.vehicleModelId as string) || 'vm1',
-      variantId: (data.variantId as string) || 'vv1',
-      brand: (data.brand as string) || 'Toyota',
-      model: (data.model as string) || 'Camry',
-      variant: (data.variant as string) || 'Base',
+      dealerId,
+      dealer,
+      ...resolveVehicleIdentity({
+        brand, model, variant, vehicleModelId: data.vehicleModelId as string, variantId: data.variantId as string,
+      }, mockBrowserVehicles),
+      brand,
+      model,
+      variant,
       year: Number(data.year) || 2024,
       fuelType: (data.fuelType as VehicleListing['fuelType']) || 'Petrol',
       transmission: (data.transmission as VehicleListing['transmission']) || 'Automatic',
@@ -827,11 +848,12 @@ export const vehicleService = {
       ? Number(data.price)
       : current.dealerOfferPrice;
 
+    if (!pricingService.isValid(offerPrice)) return { success: false, error: 'Enter a valid positive dealer price.' };
+
     mockBrowserVehicles[idx] = {
       ...current,
       ...data,
-      dealerOfferPrice: offerPrice,
-      price: offerPrice,
+      ...pricingService.revise(current, offerPrice, new Date().toISOString()),
       updatedAt: new Date().toISOString(),
     };
 
@@ -850,15 +872,16 @@ export const vehicleService = {
     const idx = mockBrowserVehicles.findIndex(v => v.id === id);
     if (idx === -1) return { success: false, error: 'Vehicle not found' };
 
-    mockBrowserVehicles[idx].dealerOfferPrice = prices.dealerOfferPrice;
-    mockBrowserVehicles[idx].price = prices.dealerOfferPrice;
-    if (prices.exShowroomPrice !== undefined) {
-      mockBrowserVehicles[idx].exShowroomPrice = prices.exShowroomPrice;
-    }
-    if (prices.onRoadPrice !== undefined) {
-      mockBrowserVehicles[idx].onRoadPrice = prices.onRoadPrice;
-    }
-    mockBrowserVehicles[idx].updatedAt = new Date().toISOString();
+    if (!pricingService.isValid(prices.dealerOfferPrice)) return { success: false, error: 'Enter a valid positive dealer price.' };
+    const current = mockBrowserVehicles[idx];
+    const updatedAt = new Date().toISOString();
+    mockBrowserVehicles[idx] = {
+      ...current,
+      ...pricingService.revise(current, prices.dealerOfferPrice, updatedAt),
+      exShowroomPrice: prices.exShowroomPrice ?? current.exShowroomPrice,
+      onRoadPrice: prices.onRoadPrice ?? current.onRoadPrice,
+      updatedAt,
+    };
 
     return { success: true, data: mockBrowserVehicles[idx] };
   },
@@ -886,6 +909,8 @@ export const vehicleService = {
     if (api?.vehicles?.delete) {
       return api.vehicles.delete(id) as Promise<ApiResponse<{ id: string }>>;
     }
+    const listing = mockBrowserVehicles.find(vehicle => vehicle.id === id);
+    if (listing) archivedPriceChanges.push(...pricingService.listingChanges(listing));
     mockBrowserVehicles = mockBrowserVehicles.filter(v => v.id !== id);
     return { success: true, data: { id } };
   },

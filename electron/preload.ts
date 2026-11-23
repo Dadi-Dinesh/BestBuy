@@ -15,6 +15,7 @@ const electronAPI = {
 
   // Vehicles
   vehicles: {
+    getPriceChanges: () => ipcRenderer.invoke('vehicles:getPriceChanges'),
     getAll: (filters?: Record<string, unknown>) =>
       ipcRenderer.invoke('vehicles:getAll', filters),
     getById: (id: string) => ipcRenderer.invoke('vehicles:getById', id),
@@ -41,7 +42,7 @@ const electronAPI = {
 
   // Queue
   queue: {
-    join: (data: { vehicleModelId: string; customerId: string; variantId?: string }) =>
+    join: (data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string }) =>
       ipcRenderer.invoke('queue:join', data),
     getPosition: (queueId: string) =>
       ipcRenderer.invoke('queue:getPosition', queueId),
@@ -55,6 +56,7 @@ const electronAPI = {
 
   // Offers
   offers: {
+    accept: (id: string, lockDurationHours: number) => ipcRenderer.invoke('offers:accept', id, lockDurationHours),
     getAll: () => ipcRenderer.invoke('offers:getAll'),
     getByCustomerId: (customerId: string) =>
       ipcRenderer.invoke('offers:getByCustomerId', customerId),
@@ -69,7 +71,7 @@ const electronAPI = {
   // Bookings
   bookings: {
     getAll: () => ipcRenderer.invoke('bookings:getAll'),
-    create: (data: { customerId: string; listingId: string; dealerId: string; notes?: string }) =>
+    create: (data: { customerId: string; listingId: string; dealerId: string; notes?: string; lockedPrice?: number; bookingDate?: string }) =>
       ipcRenderer.invoke('bookings:create', data),
     getByCustomerId: (customerId: string) =>
       ipcRenderer.invoke('bookings:getByCustomerId', customerId),

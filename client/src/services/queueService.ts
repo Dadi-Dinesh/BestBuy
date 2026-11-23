@@ -1,3 +1,4 @@
+import { demandFixtures } from '../../../src/data/demandFixtures';
 import { ApiResponse, QueueEntry } from '../types';
 
 function getAPI() {
@@ -8,8 +9,10 @@ function getAPI() {
 }
 
 const mockQueues: QueueEntry[] = [
+  ...demandFixtures().queues,
   {
     id: 'q1',
+    city: 'Los Angeles',
     vehicleModelId: 'vm1',
     variantId: 'vv2',
     customerId: 'u1',
@@ -17,7 +20,7 @@ const mockQueues: QueueEntry[] = [
     customerPhone: '+1 (555) 234-5678',
     position: 2,
     status: 'waiting',
-    createdAt: '2024-02-05T10:15:00Z',
+    createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
     vehicleModel: {
       id: 'vm1',
       make: 'Toyota',
@@ -39,6 +42,7 @@ const mockQueues: QueueEntry[] = [
   },
   {
     id: 'q2',
+    city: 'San Francisco',
     vehicleModelId: 'vm4',
     variantId: 'vv5',
     customerId: 'u1',
@@ -46,7 +50,7 @@ const mockQueues: QueueEntry[] = [
     customerPhone: '+1 (555) 234-5678',
     position: 1,
     status: 'offered',
-    createdAt: '2024-02-06T14:30:00Z',
+    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
     vehicleModel: {
       id: 'vm4',
       make: 'Tesla',
@@ -69,7 +73,11 @@ const mockQueues: QueueEntry[] = [
 ];
 
 export const queueService = {
-  async join(data: { vehicleModelId: string; customerId: string; variantId?: string }): Promise<ApiResponse<QueueEntry>> {
+  markBooked(id: string) {
+    const entry = mockQueues.find(queue => queue.id === id);
+    if (entry && (entry.status === 'waiting' || entry.status === 'offered')) entry.status = 'booked';
+  },
+  async join(data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string }): Promise<ApiResponse<QueueEntry>> {
     const api = getAPI();
     if (api?.queue?.join) {
       return api.queue.join(data) as Promise<ApiResponse<QueueEntry>>;
@@ -78,8 +86,13 @@ export const queueService = {
       id: `q${Date.now()}`,
       vehicleModelId: data.vehicleModelId,
       variantId: data.variantId || '',
+      city: data.city,
       customerId: data.customerId,
-      position: mockQueues.length + 1,
+      position: mockQueues.filter(queue =>
+        queue.vehicleModelId === data.vehicleModelId && queue.variantId === (data.variantId || '') &&
+        queue.city?.trim().toLowerCase() === data.city?.trim().toLowerCase() &&
+        (queue.status === 'waiting' || queue.status === 'offered')
+      ).length + 1,
       status: 'waiting',
       createdAt: new Date().toISOString(),
     };

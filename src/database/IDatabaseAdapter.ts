@@ -1,3 +1,4 @@
+import type { ListingPriceChange } from '../services/pricingService';
 import {
   User,
   Dealer,
@@ -34,6 +35,7 @@ export interface IDatabaseAdapter {
   };
 
   vehicles: {
+    getPriceChanges(): Promise<ApiResponse<ListingPriceChange[]>>;
     getAll(filters?: Record<string, unknown>): Promise<ApiResponse<VehicleListing[]>>;
     getById(id: string): Promise<ApiResponse<VehicleListing>>;
     create(data: CreateVehicleListingData | Record<string, unknown>): Promise<ApiResponse<VehicleListing>>;
@@ -51,7 +53,7 @@ export interface IDatabaseAdapter {
   };
 
   queue: {
-    join(data: { vehicleModelId: string; customerId: string; variantId?: string }): Promise<ApiResponse<QueueEntry>>;
+    join(data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string }): Promise<ApiResponse<QueueEntry>>;
     getPosition(queueId: string): Promise<ApiResponse<{ position: number }>>;
     leave(queueId: string): Promise<ApiResponse<{ id: string }>>;
     getByCustomerId(customerId: string): Promise<ApiResponse<QueueEntry[]>>;
@@ -59,6 +61,7 @@ export interface IDatabaseAdapter {
   };
 
   offers: {
+    accept(id: string, lockDurationHours: number): Promise<ApiResponse<{ offer: Offer; bookingId: string }>>;
     getAll(): Promise<ApiResponse<Offer[]>>;
     getByCustomerId(customerId: string): Promise<ApiResponse<Offer[]>>;
     getByDealerId(dealerId: string): Promise<ApiResponse<Offer[]>>;
@@ -68,7 +71,7 @@ export interface IDatabaseAdapter {
 
   bookings: {
     getAll(): Promise<ApiResponse<Booking[]>>;
-    create(data: { customerId: string; listingId: string; dealerId: string; notes?: string }): Promise<ApiResponse<Booking>>;
+    create(data: { customerId: string; listingId: string; dealerId: string; notes?: string; lockedPrice?: number; bookingDate?: string }): Promise<ApiResponse<Booking>>;
     getByCustomerId(customerId: string): Promise<ApiResponse<Booking[]>>;
     getByDealerId(dealerId: string): Promise<ApiResponse<Booking[]>>;
     updateStatus(id: string, status: Booking['status']): Promise<ApiResponse<Booking>>;

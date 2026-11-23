@@ -27,6 +27,9 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   });
 
   // Vehicle handlers
+  ipcMain.handle('vehicles:getPriceChanges', async () => {
+    return adapter.vehicles.getPriceChanges();
+  });
   ipcMain.handle('vehicles:getAll', async (_event, filters) => {
     return adapter.vehicles.getAll(filters);
   });
@@ -94,6 +97,10 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   });
 
   // Offer handlers
+  ipcMain.handle('offers:accept', async (_event, id: string, lockDurationHours: number) => {
+    return adapter.offers.accept(id, lockDurationHours);
+  });
+
   ipcMain.handle('offers:getAll', async () => {
     return adapter.offers.getAll();
   });

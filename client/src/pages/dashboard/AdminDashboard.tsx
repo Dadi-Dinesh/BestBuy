@@ -1,3 +1,4 @@
+import { MarketMonitoring, useMarketData } from '../../components/demand/MarketMonitoring';
 import React, { useState, useEffect } from 'react';
 import {
   Users,
@@ -26,7 +27,8 @@ import { Dealer, VehicleListing, QueueEntry, Booking, User } from '../../types';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 
 export const AdminDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'approvals' | 'dealers' | 'vehicles' | 'users' | 'queues'>('approvals');
+  const [activeTab, setActiveTab] = useState<'approvals' | 'dealers' | 'vehicles' | 'users' | 'queues' | 'monitoring'>('approvals');
+  const monitor = useMarketData(true);
 
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [vehicles, setVehicles] = useState<VehicleListing[]>([]);
@@ -229,7 +231,12 @@ export const AdminDashboard: React.FC = () => {
           <ClipboardList size={15} />
           Audit Queues ({queues.length})
         </button>
+        <button onClick={() => setActiveTab('monitoring')} className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider border-b-2 ${activeTab === 'monitoring' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>
+          Demand and Pricing
+        </button>
       </div>
+
+      {activeTab === 'monitoring' && <MarketMonitoring monitor={monitor} />}
 
       {/* TAB 1: DEALER APPROVAL MANAGEMENT */}
       {activeTab === 'approvals' && (

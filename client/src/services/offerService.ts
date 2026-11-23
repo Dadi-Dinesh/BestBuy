@@ -1,4 +1,10 @@
+import { pricingService } from '../../../src/services/pricingService';
+import { vehicleService } from './vehicleService';
+import { queueService } from './queueService';
+import { demandFixtures } from '../../../src/data/demandFixtures';
 import { ApiResponse, Offer } from '../types';
+import { notificationService } from './notificationService';
+import { bookingService } from './bookingService';
 
 function getAPI() {
   if (typeof window !== 'undefined' && (window as unknown as { electronAPI?: unknown }).electronAPI) {
@@ -7,7 +13,8 @@ function getAPI() {
   return null;
 }
 
-const mockOffers: Offer[] = [
+let mockOffers: Offer[] = [
+  ...demandFixtures().offers,
   {
     id: 'o1',
     queueEntryId: 'q2',
@@ -15,15 +22,20 @@ const mockOffers: Offer[] = [
     customerName: 'Alice Johnson',
     dealerId: 'd2',
     dealerName: 'City Cars Direct',
+    listingId: 'l6',
     vehicleModelId: 'vm4',
     vehicleName: 'Tesla Model Y',
     variantName: 'Long Range AWD',
+    color: 'Stealth Grey',
+    availability: 'In Stock (Allocation #TY-44)',
+    expectedDeliveryDate: new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
     offeredPrice: 46500,
     originalPrice: 47990,
     status: 'pending',
-    expiryDate: '2024-02-28T23:59:59Z',
-    createdAt: '2024-02-08T09:00:00Z',
-    notes: 'Special incentive offer: $1,490 dealer discount plus complimentary ceramic coating.',
+    expiryDate: new Date(Date.now() + 86400000 * 5).toISOString(),
+    createdAt: new Date(Date.now() - 3600000 * 3).toISOString(),
+    notes: 'Queue priority offer: $1,490 dealer incentive discount.',
+    terms: 'Offer price valid for 5 days. Includes complimentary ceramic paint coating and 1st year mobile charger.',
   },
   {
     id: 'o2',
@@ -32,15 +44,42 @@ const mockOffers: Offer[] = [
     customerName: 'Alice Johnson',
     dealerId: 'd1',
     dealerName: 'Premier Auto Group',
+    listingId: 'l2',
     vehicleModelId: 'vm1',
     vehicleName: 'Toyota Camry',
     variantName: 'XSE Hybrid',
+    color: 'Wind Chill Pearl',
+    availability: 'In Stock (2 units)',
+    expectedDeliveryDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
     offeredPrice: 33900,
     originalPrice: 34850,
     status: 'pending',
-    expiryDate: '2024-02-25T23:59:59Z',
-    createdAt: '2024-02-09T14:00:00Z',
-    notes: 'Exclusive queue match pricing with 2 years of complimentary factory maintenance.',
+    expiryDate: new Date(Date.now() + 86400000 * 4).toISOString(),
+    createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
+    notes: 'Exclusive queue match pricing with immediate showroom delivery.',
+    terms: 'Price includes destination fee and 2 years complimentary factory scheduled maintenance.',
+  },
+  {
+    id: 'o3',
+    queueEntryId: 'q3',
+    customerId: 'u6',
+    customerName: 'David Miller',
+    dealerId: 'd1',
+    dealerName: 'Premier Auto Group',
+    listingId: 'l1',
+    vehicleModelId: 'vm1',
+    vehicleName: 'Toyota Camry',
+    variantName: 'LE',
+    color: 'Midnight Black Metallic',
+    availability: 'In Stock (4 units)',
+    expectedDeliveryDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
+    offeredPrice: 27950,
+    originalPrice: 28400,
+    status: 'accepted',
+    expiryDate: new Date(Date.now() + 86400000 * 3).toISOString(),
+    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+    notes: 'Fast-track test drive & delivery bundle.',
+    terms: 'Price locked under BestBuy multi-dealer guarantee.',
   },
 ];
 
@@ -74,13 +113,112 @@ export const offerService = {
     if (api?.offers?.create) {
       return api.offers.create(data) as Promise<ApiResponse<Offer>>;
     }
+
+    const { data: listing } = data.listingId ? await vehicleService.getById(data.listingId) : {};
+    if (!listing || listing.dealerId !== data.dealerId || !pricingService.isValid(data.offeredPrice)) {
+      return { success: false, error: 'Select a dealer listing and enter a valid offer price.' };
+    }
     const newOffer: Offer = {
       ...data,
+      originalPrice: pricingService.current(listing),
       id: `o${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
-    mockOffers.push(newOffer);
+    mockOffers.unshift(newOffer);
+
+    // Trigger in-app notification for the customer
+    notificationService.add({
+      userId: newOffer.customerId,
+      title: 'New Dealer Offer Received!',
+      message: `${newOffer.dealerName || 'A dealership'} sent you an offer of $${newOffer.offeredPrice.toLocaleString()} for the ${newOffer.vehicleName} (${newOffer.variantName}).`,
+      type: 'success',
+      category: 'offer',
+      linkTo: '/dashboard',
+    });
+
     return { success: true, data: newOffer };
+  },
+
+  async acceptOffer(id: string, lockDurationHours = 72): Promise<ApiResponse<{ offer: Offer; bookingId: string }>> {
+    const api = getAPI();
+    if (api?.offers?.accept) {
+      return api.offers.accept(id, lockDurationHours) as Promise<ApiResponse<{ offer: Offer; bookingId: string }>>;
+    }
+    const offer = mockOffers.find(o => o.id === id);
+    if (!offer?.listingId || offer.status !== 'pending' || !(Date.parse(offer.expiryDate) > Date.now())) {
+      return { success: false, error: 'This offer is no longer available.' };
+    }
+    if (![24, 48, 72, 168].includes(lockDurationHours)) {
+      return { success: false, error: 'Select a supported price lock duration.' };
+    }
+    offer.status = 'accepted';
+
+    // 1. Create booking with locked price
+    const bookingRes = await bookingService.createFromOffer({
+      offerId: offer.id,
+      customerId: offer.customerId,
+      customerName: offer.customerName,
+      dealerId: offer.dealerId,
+      listingId: offer.listingId,
+      vehicleName: offer.vehicleName,
+      variantName: offer.variantName,
+      color: offer.color,
+      lockedPrice: offer.offeredPrice,
+      lockDurationHours,
+      notes: `Created from accepted offer ${offer.id}. Terms: ${offer.terms || 'Standard dealer terms apply.'}`,
+    });
+
+    if (!bookingRes.success || !bookingRes.data) {
+      offer.status = 'pending';
+      return { success: false, error: bookingRes.error || 'Could not create the price lock.' };
+    }
+    const bookingId = bookingRes.data.id;
+    if (offer.queueEntryId) queueService.markBooked(offer.queueEntryId);
+
+    // 2. Notify Dealer
+    notificationService.add({
+      userId: offer.dealerId,
+      title: 'Offer Accepted! Price Locked',
+      message: `${offer.customerName || 'Customer'} accepted your offer of $${offer.offeredPrice.toLocaleString()} for ${offer.vehicleName}. Price is locked for ${lockDurationHours} hours.`,
+      type: 'success',
+      category: 'booking',
+      linkTo: '/inventory',
+    });
+
+    // 3. Notify Customer
+    notificationService.add({
+      userId: offer.customerId,
+      title: 'Offer Accepted & Price Locked!',
+      message: `Your accepted price of $${offer.offeredPrice.toLocaleString()} with ${offer.dealerName} is locked for ${lockDurationHours} hours. Booking is Pending Confirmation.`,
+      type: 'info',
+      category: 'booking',
+      linkTo: '/bookings',
+    });
+
+    return { success: true, data: { offer, bookingId } };
+  },
+
+  async declineOffer(id: string, reason?: string): Promise<ApiResponse<Offer>> {
+    const api = getAPI();
+    if (api?.offers?.updateStatus) {
+      return api.offers.updateStatus(id, 'declined') as Promise<ApiResponse<Offer>>;
+    }
+    const offer = mockOffers.find(o => o.id === id);
+    if (!offer || offer.status !== 'pending') return { success: false, error: 'This offer is no longer available.' };
+
+    offer.status = 'declined';
+
+    // Notify dealer
+    notificationService.add({
+      userId: offer.dealerId,
+      title: 'Offer Declined',
+      message: `Customer ${offer.customerName || ''} declined your offer of $${offer.offeredPrice.toLocaleString()} on ${offer.vehicleName}${reason ? `: "${reason}"` : '.'}`,
+      type: 'warning',
+      category: 'offer',
+      linkTo: '/inventory',
+    });
+
+    return { success: true, data: offer };
   },
 
   async updateStatus(id: string, status: Offer['status']): Promise<ApiResponse<Offer>> {

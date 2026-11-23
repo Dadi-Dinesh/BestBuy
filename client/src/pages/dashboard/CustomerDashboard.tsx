@@ -1,3 +1,4 @@
+import { ListingPriceChange } from '../../components/demand/ListingPriceChange';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -26,6 +27,13 @@ import {
   List,
   Eye,
   Award,
+  Lock,
+  AlertTriangle,
+  Phone,
+  Mail,
+  User as UserIcon,
+  ChevronRight,
+  HelpCircle,
 } from 'lucide-react';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -36,7 +44,13 @@ import { vehicleService } from '../../services/vehicleService';
 import { queueService } from '../../services/queueService';
 import { offerService } from '../../services/offerService';
 import { bookingService } from '../../services/bookingService';
-import { VehicleListing, QueueEntry, Offer, Booking, FuelType, TransmissionType, VehicleAvailabilityStatus } from '../../types';
+import {
+  VehicleListing,
+  QueueEntry,
+  Offer,
+  Booking,
+  BookingStatus,
+} from '../../types';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 import { VehicleDetailsPage } from '../vehicle/VehicleDetailsPage';
 
@@ -74,7 +88,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
   const [pinCodeFilter, setPinCodeFilter] = useState('');
   const [maxBudget, setMaxBudget] = useState<number>(65000);
 
-  // --- Additional Filters & Sorting ---
+  // --- Filters & Sorting ---
   const [selectedAvailability, setSelectedAvailability] = useState<string>('all');
   const [selectedDealer, setSelectedDealer] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'lowest_price' | 'highest_price' | 'earliest_delivery' | 'newest'>('lowest_price');
@@ -83,12 +97,34 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
   // Comparison Tab Active Model Key
   const [comparisonModelKey, setComparisonModelKey] = useState<string>('');
 
-  // Modals
+  // Offer Filter
+  const [offerFilter, setOfferFilter] = useState<'all' | 'pending' | 'accepted' | 'declined' | 'expired'>('all');
+
+  // Booking Filter
+  const [bookingFilter, setBookingFilter] = useState<'all' | 'active' | 'history'>('all');
+
+  // Offer Acceptance & Price Lock Modal
+  const [acceptingOffer, setAcceptingOffer] = useState<Offer | null>(null);
+  const [lockDurationHours, setLockDurationHours] = useState<number>(72);
+  const [isAcceptingOffer, setIsAcceptingOffer] = useState(false);
+
+  // Offer Decline Modal
+  const [decliningOffer, setDecliningOffer] = useState<Offer | null>(null);
+  const [declineReason, setDeclineReason] = useState('');
+  const [isDecliningOffer, setIsDecliningOffer] = useState(false);
+
+  // Booking Cancellation Modal
+  const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isCancellingBooking, setIsCancellingBooking] = useState(false);
+
+  // Direct Booking Modal
   const [bookingVehicle, setBookingVehicle] = useState<VehicleListing | null>(null);
   const [bookingDate, setBookingDate] = useState(new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0]);
   const [bookingNotes, setBookingNotes] = useState('');
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
 
+  // Queue Modal
   const [queueModalVehicle, setQueueModalVehicle] = useState<VehicleListing | null>(null);
   const [isJoiningQueue, setIsJoiningQueue] = useState(false);
 
@@ -114,14 +150,81 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
     loadData();
   }, [user]);
 
-  // Handle Offer Response
-  const handleOfferResponse = async (offerId: string, status: 'accepted' | 'declined') => {
-    const res = await offerService.updateStatus(offerId, status);
-    if (res.success) {
-      setOffers(prev => prev.map(o => (o.id === offerId ? { ...o, status } : o)));
-      setActionMessage(`Offer has been marked as ${status}.`);
-      setTimeout(() => setActionMessage(null), 3000);
+  // Handle Offer Acceptance with Price Lock
+  const handleConfirmAcceptOffer = async () => {
+    if (!acceptingOffer) return;
+    setIsAcceptingOffer(true);
+
+    const res = await offerService.acceptOffer(acceptingOffer.id, lockDurationHours);
+    setIsAcceptingOffer(false);
+    setAcceptingOffer(null);
+
+    if (!res.success) {
+      setActionMessage(res.error || 'The offer could not be accepted.');
+      setTimeout(() => setActionMessage(null), 4000);
     }
+    if (res.success && res.data) {
+      setOffers(prev => prev.map(o => (o.id === acceptingOffer.id ? { ...o, status: 'accepted' } : o)));
+
+      // Reload bookings to reflect the new price-locked booking
+      if (user) {
+        const [bRes, qRes] = await Promise.all([
+          bookingService.getByCustomerId(user.id), queueService.getByCustomerId(user.id),
+        ]);
+        if (bRes.success && bRes.data) setBookings(bRes.data);
+        if (qRes.success && qRes.data) setQueues(qRes.data);
+      }
+
+      setActionMessage(
+        `Offer Accepted! Price of $${acceptingOffer.offeredPrice.toLocaleString()} locked for ${lockDurationHours} hours.`
+      );
+      setTimeout(() => setActionMessage(null), 4000);
+    }
+  };
+
+  // Handle Offer Decline
+  const handleConfirmDeclineOffer = async () => {
+    if (!decliningOffer) return;
+    setIsDecliningOffer(true);
+
+    const res = await offerService.declineOffer(decliningOffer.id, declineReason);
+    setIsDecliningOffer(false);
+    setDecliningOffer(null);
+    setDeclineReason('');
+
+    if (res.success) {
+      setOffers(prev => prev.map(o => (o.id === decliningOffer.id ? { ...o, status: 'declined' } : o)));
+      setActionMessage('Offer declined. Dealer has been notified.');
+      setTimeout(() => setActionMessage(null), 3500);
+    }
+  };
+
+  // Handle Booking Cancellation
+  const handleConfirmCancelBooking = async () => {
+    if (!cancellingBooking) return;
+    setIsCancellingBooking(true);
+
+    const res = await bookingService.updateStatus(cancellingBooking.id, 'cancelled', cancelReason);
+    setIsCancellingBooking(false);
+    setCancellingBooking(null);
+    setCancelReason('');
+
+    if (res.success && res.data) {
+      setBookings(prev => prev.map(b => (b.id === cancellingBooking.id ? res.data! : b)));
+      setActionMessage('Booking has been cancelled.');
+      setTimeout(() => setActionMessage(null), 3500);
+    }
+  };
+
+  // Switch to comparison tab for a specific offer's vehicle
+  const handleCompareOfferWithMarket = (offer: Offer) => {
+    const targetKey = comparisonKeys.find(k =>
+      k.toLowerCase().includes(offer.vehicleName.toLowerCase())
+    );
+    if (targetKey) {
+      setComparisonModelKey(targetKey);
+    }
+    setActiveTab('comparison');
   };
 
   // Handle Leave Queue
@@ -202,7 +305,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
   const filteredVehicles = useMemo(() => {
     return vehicles
       .filter(v => {
-        // Search text matching (brand, model, variant, color, dealership)
         const q = searchQuery.toLowerCase().trim();
         const matchesQuery =
           !q ||
@@ -213,7 +315,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
           (v.dealer?.dealershipName && v.dealer.dealershipName.toLowerCase().includes(q)) ||
           (v.dealer?.city && v.dealer.city.toLowerCase().includes(q));
 
-        // Exact match filters
         const matchesBrand = selectedBrand === 'all' || v.brand === selectedBrand;
         const matchesModel = selectedModel === 'all' || v.model === selectedModel;
         const matchesVariant = selectedVariant === 'all' || v.variant === selectedVariant;
@@ -282,7 +383,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       if (!groups[key]) groups[key] = [];
       groups[key].push(v);
     });
-    // Sort items within each group by price
     Object.keys(groups).forEach(key => {
       groups[key].sort((a, b) => a.dealerOfferPrice - b.dealerOfferPrice);
     });
@@ -291,10 +391,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
   const comparisonKeys = Object.keys(comparisonGroups);
 
-  // Set default comparison group key if not set
   useEffect(() => {
     if (comparisonKeys.length > 0 && (!comparisonModelKey || !comparisonGroups[comparisonModelKey])) {
-      // Pick first group that has multiple dealers if available
       const multiDealerKey = comparisonKeys.find(k => comparisonGroups[k].length > 1);
       setComparisonModelKey(multiDealerKey || comparisonKeys[0]);
     }
@@ -313,6 +411,21 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
           activeComparisonListings.length
       )
     : 0;
+
+  // Filtered Offers List
+  const filteredOffers = useMemo(() => {
+    if (offerFilter === 'all') return offers;
+    return offers.filter(o => o.status === offerFilter);
+  }, [offers, offerFilter]);
+
+  // Filtered Bookings List
+  const filteredBookings = useMemo(() => {
+    if (bookingFilter === 'all') return bookings;
+    if (bookingFilter === 'active') {
+      return bookings.filter(b => ['pending', 'confirmed', 'payment_pending', 'booked'].includes(b.status));
+    }
+    return bookings.filter(b => ['completed', 'cancelled', 'expired'].includes(b.status));
+  }, [bookings, bookingFilter]);
 
   // Reset all search and filter fields
   const handleResetFilters = () => {
@@ -345,7 +458,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
     selectedAvailability !== 'all' ||
     selectedDealer !== 'all';
 
-  // Handle booking form submission
+  // Handle direct booking confirmation
   const handleConfirmBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bookingVehicle || !user) return;
@@ -353,18 +466,31 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
     const res = await bookingService.create({
       customerId: user.id,
+      customerName: user.name,
       dealerId: bookingVehicle.dealerId,
       listingId: bookingVehicle.id,
-      notes: bookingNotes || `Showroom visit and test drive scheduled for ${formatDate(bookingDate)}.`,
+      lockedPrice: bookingVehicle.dealerOfferPrice,
+      lockDurationHours: 72,
+      bookingDate,
+      vehicleName: `${bookingVehicle.brand} ${bookingVehicle.model}`,
+      variantName: bookingVehicle.variant,
+      color: bookingVehicle.color,
+      notes: bookingNotes || `Showroom visit scheduled for ${formatDate(bookingDate)}.`,
     });
 
     setIsSubmittingBooking(false);
     setBookingVehicle(null);
 
+    if (!res.success) {
+      setActionMessage(res.error || 'The booking could not be created.');
+      const updated = await vehicleService.getAll();
+      if (updated.success && updated.data) setVehicles(updated.data);
+      setTimeout(() => setActionMessage(null), 4000);
+    }
     if (res.success && res.data) {
       setBookings(prev => [res.data!, ...prev]);
       setActionMessage(
-        `Booking request confirmed with ${bookingVehicle.dealer?.dealershipName || 'dealership'}!`
+        `Booking request confirmed with ${bookingVehicle.dealer?.dealershipName || 'dealership'}! Price locked for 72 hours.`
       );
       setTimeout(() => setActionMessage(null), 4000);
     }
@@ -377,8 +503,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
     const res = await queueService.join({
       customerId: user.id,
-      vehicleModelId: queueModalVehicle.vehicleModelId || 'vm1',
-      variantId: queueModalVehicle.variantId || 'vv1',
+      vehicleModelId: queueModalVehicle.vehicleModelId,
+      variantId: queueModalVehicle.variantId,
+      city: queueModalVehicle.dealer?.city,
     });
 
     setIsJoiningQueue(false);
@@ -393,7 +520,28 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
     }
   };
 
-  // If a vehicle detail is selected, show the full details view
+  // Status Badge Helper
+  const getBookingStatusBadge = (status: BookingStatus) => {
+    switch (status) {
+      case 'pending':
+        return <Badge variant="warning">Pending Confirmation</Badge>;
+      case 'confirmed':
+        return <Badge variant="info">Confirmed by Dealer</Badge>;
+      case 'payment_pending':
+        return <Badge variant="warning">Payment Pending</Badge>;
+      case 'booked':
+        return <Badge variant="success">Booked & Reserved</Badge>;
+      case 'completed':
+        return <Badge variant="success">Completed</Badge>;
+      case 'cancelled':
+        return <Badge variant="danger">Cancelled</Badge>;
+      case 'expired':
+        return <Badge variant="neutral">Expired</Badge>;
+      default:
+        return <Badge variant="neutral">{status}</Badge>;
+    }
+  };
+
   if (selectedVehicleForDetails) {
     return (
       <VehicleDetailsPage
@@ -444,11 +592,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
         <Card padding="sm" className="border-slate-200">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
-              <TrendingDown size={20} />
+              <Tag size={20} />
             </div>
             <div>
-              <p className="text-xs text-slate-500 font-medium">Dealer Comparison Models</p>
-              <p className="text-xl font-bold text-slate-900">{comparisonKeys.length} Models</p>
+              <p className="text-xs text-slate-500 font-medium">Active Offers</p>
+              <p className="text-xl font-bold text-slate-900">
+                {offers.filter(o => o.status === 'pending').length} Received
+              </p>
             </div>
           </div>
         </Card>
@@ -459,7 +609,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
               <ClipboardList size={20} />
             </div>
             <div>
-              <p className="text-xs text-slate-500 font-medium">Active Queue Spots</p>
+              <p className="text-xs text-slate-500 font-medium">Waitlist Positions</p>
               <p className="text-xl font-bold text-slate-900">
                 {queues.filter(q => q.status === 'waiting' || q.status === 'offered').length}
               </p>
@@ -474,7 +624,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
             </div>
             <div>
               <p className="text-xs text-slate-500 font-medium">Active Bookings</p>
-              <p className="text-xl font-bold text-slate-900">{bookings.length}</p>
+              <p className="text-xl font-bold text-slate-900">
+                {bookings.filter(b => ['pending', 'confirmed', 'payment_pending', 'booked'].includes(b.status)).length}
+              </p>
             </div>
           </div>
         </Card>
@@ -503,19 +655,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
           }`}
         >
           <TrendingDown size={15} />
-          Multi-Dealer Price Comparison
-        </button>
-
-        <button
-          onClick={() => setActiveTab('queues')}
-          className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
-            activeTab === 'queues'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <ClipboardList size={15} />
-          My Queues ({queues.length})
+          Price Comparison
         </button>
 
         <button
@@ -527,7 +667,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
           }`}
         >
           <Tag size={15} />
-          Received Offers ({offers.length})
+          Dealer Offers ({offers.length})
         </button>
 
         <button
@@ -541,6 +681,18 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
           <Calendar size={15} />
           My Bookings ({bookings.length})
         </button>
+
+        <button
+          onClick={() => setActiveTab('queues')}
+          className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
+            activeTab === 'queues'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <ClipboardList size={15} />
+          My Queues ({queues.length})
+        </button>
       </div>
 
       {/* ========================================================================= */}
@@ -550,7 +702,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
         <div className="space-y-5">
           {/* Main Search Panel */}
           <Card padding="md" className="border-slate-200 shadow-sm space-y-4">
-            {/* Primary Search Bar */}
             <div className="flex flex-col md:flex-row gap-3">
               <div className="flex-1">
                 <Input
@@ -646,11 +797,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
               </div>
             </div>
 
-            {/* Advanced Filters: Fuel, Transmission, Colour, City, PIN, Budget */}
+            {/* Advanced Filters */}
             {showAdvancedFilters && (
               <div className="pt-3 border-t border-slate-100 space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                  {/* Fuel type */}
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       Fuel Type
@@ -669,7 +819,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     </select>
                   </div>
 
-                  {/* Transmission */}
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       Transmission
@@ -688,7 +837,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     </select>
                   </div>
 
-                  {/* Colour */}
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       Preferred Colour
@@ -705,7 +853,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     </select>
                   </div>
 
-                  {/* City */}
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       Showroom City
@@ -722,7 +869,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     </select>
                   </div>
 
-                  {/* PIN code */}
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       Location PIN Code
@@ -736,7 +882,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     />
                   </div>
 
-                  {/* Dealership */}
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       Specific Dealer
@@ -754,7 +899,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                   </div>
                 </div>
 
-                {/* Budget Slider */}
                 <div className="p-3 bg-slate-50 rounded-xl space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-slate-700 flex items-center gap-1">
@@ -783,7 +927,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
             )}
           </Card>
 
-          {/* Results Toolbar: Count, Sorting, View Toggle */}
+          {/* Results Toolbar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
             <div className="flex items-center gap-2 text-xs text-slate-600">
               <span className="font-bold text-slate-900">{filteredVehicles.length} Vehicles Found</span>
@@ -796,7 +940,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Sort selector */}
               <div className="flex items-center gap-1.5 text-xs text-slate-500">
                 <span className="font-medium">Sort by:</span>
                 <select
@@ -811,7 +954,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 </select>
               </div>
 
-              {/* View Switcher */}
               <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
                 <button
                   onClick={() => setViewMode('cards')}
@@ -851,7 +993,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 </div>
               ) : (
                 filteredVehicles.map(v => {
-                  // Find all dealers offering this exact model and variant to show count
                   const peers = vehicles.filter(
                     item =>
                       item.brand.toLowerCase() === v.brand.toLowerCase() &&
@@ -868,7 +1009,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                       className="overflow-hidden flex flex-col justify-between hover:shadow-md transition-all group border-slate-200"
                     >
                       <div>
-                        {/* Image banner with badges */}
                         <div className="relative aspect-[16/10] bg-slate-100 overflow-hidden">
                           <img
                             src={
@@ -897,7 +1037,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           </div>
                         </div>
 
-                        {/* Specs & Info */}
                         <div className="p-4 space-y-2.5">
                           <div>
                             <div className="flex items-center justify-between text-[11px] text-blue-600 font-bold uppercase tracking-wider">
@@ -910,7 +1049,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                             <p className="text-xs text-slate-500 font-medium">{v.variant}</p>
                           </div>
 
-                          {/* Dealership info box */}
                           <div className="p-2.5 bg-slate-50 rounded-xl text-xs space-y-1 border border-slate-100">
                             <div className="flex items-center justify-between">
                               <span className="font-semibold text-slate-800 flex items-center gap-1.5">
@@ -929,7 +1067,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                             </p>
                           </div>
 
-                          {/* Multiple dealer indicator */}
                           {peers.length > 1 && (
                             <p className="text-[11px] text-slate-400 flex items-center gap-1 pt-0.5">
                               <TrendingDown size={12} className="text-blue-600" />
@@ -939,7 +1076,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                         </div>
                       </div>
 
-                      {/* Bottom Price & Actions */}
                       <div className="p-4 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-2">
                         <div>
                           <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
@@ -948,6 +1084,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           <span className="text-base font-extrabold text-slate-900 block">
                             {formatCurrency(v.dealerOfferPrice)}
                           </span>
+                          <ListingPriceChange listing={v} />
                         </div>
 
                         <div className="flex items-center gap-1.5">
@@ -975,7 +1112,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
             </div>
           )}
 
-          {/* Results: Table View (Side-by-Side Comparison Format) */}
+          {/* Results: Table View */}
           {viewMode === 'table' && (
             <Card padding="none" className="border-slate-200 overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
@@ -1019,6 +1156,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           <span className="text-base font-extrabold text-slate-900 block">
                             {formatCurrency(v.dealerOfferPrice)}
                           </span>
+                          <ListingPriceChange listing={v} />
                           <span className="text-[10px] text-slate-400">
                             Ex-Showroom: {formatCurrency(v.exShowroomPrice)}
                           </span>
@@ -1063,7 +1201,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       {/* ========================================================================= */}
       {activeTab === 'comparison' && (
         <div className="space-y-6">
-          {/* Explanation Banner */}
           <div className="p-4 bg-blue-50/70 border border-blue-100 rounded-xl flex items-start gap-3">
             <Sparkles size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="text-xs text-blue-900 leading-relaxed space-y-1">
@@ -1076,7 +1213,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
             </div>
           </div>
 
-          {/* Model Selector Tabs */}
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
               Select Vehicle Model & Variant to Compare:
@@ -1109,7 +1245,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
             </div>
           </div>
 
-          {/* Side-by-Side Comparison Metrics Banner */}
           {activeComparisonListings.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <Card padding="sm" className="border-emerald-200 bg-emerald-50/40">
@@ -1144,7 +1279,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                   {formatCurrency(avgGroupPrice)}
                 </p>
                 <span className="text-[11px] text-slate-500 block mt-1">
-                  Calculated across {activeComparisonListings.length} dealers
+                  Across {activeComparisonListings.length} dealerships
                 </span>
               </Card>
 
@@ -1164,7 +1299,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
             </div>
           )}
 
-          {/* Multi-Dealer Comparison Table */}
+          {/* Comparison Table */}
           <Card padding="none" className="border-slate-200 shadow-sm overflow-hidden">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
               <div>
@@ -1206,7 +1341,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           isLowest ? 'bg-emerald-50/30' : 'hover:bg-slate-50'
                         }`}
                       >
-                        {/* Dealer Name & Verification */}
                         <td className="px-6 py-4">
                           <div className="flex items-start gap-2.5">
                             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">
@@ -1229,7 +1363,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           </div>
                         </td>
 
-                        {/* Location */}
                         <td className="px-6 py-4 text-xs">
                           <p className="font-semibold text-slate-800 flex items-center gap-1">
                             <MapPin size={12} className="text-slate-400" />
@@ -1240,17 +1373,16 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           </p>
                         </td>
 
-                        {/* Price */}
                         <td className="px-6 py-4">
                           <p className="text-base font-extrabold text-slate-900">
                             {formatCurrency(item.dealerOfferPrice)}
                           </p>
+                          <ListingPriceChange listing={item} />
                           <p className="text-[10px] text-slate-400">
                             On-Road: {formatCurrency(item.onRoadPrice)}
                           </p>
                         </td>
 
-                        {/* Price Difference Indicator */}
                         <td className="px-6 py-4">
                           {isLowest ? (
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
@@ -1263,7 +1395,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           )}
                         </td>
 
-                        {/* Stock */}
                         <td className="px-6 py-4">
                           <Badge variant={item.availability === 'available' ? 'success' : 'warning'} size="sm">
                             {item.availability === 'available'
@@ -1275,7 +1406,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           </span>
                         </td>
 
-                        {/* Delivery */}
                         <td className="px-6 py-4 text-xs font-medium text-slate-700">
                           <span className="flex items-center gap-1">
                             <Clock size={12} className="text-slate-400" />
@@ -1283,7 +1413,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           </span>
                         </td>
 
-                        {/* Choose Dealer Button */}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <Button
@@ -1314,7 +1443,366 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: ACTIVE QUEUES                                                      */}
+      {/* TAB 3: CUSTOMER OFFER MANAGEMENT                                          */}
+      {/* ========================================================================= */}
+      {activeTab === 'offers' && (
+        <div className="space-y-4">
+          {/* Header & Sub-Filter Pills */}
+          <div className="p-5 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Dealer Offers & Incentives</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Review tailored proposals sent to you by verified dealerships. Accept an offer to lock the price guaranteed.
+              </p>
+            </div>
+
+            {/* Filter pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto bg-slate-50 p-1 rounded-lg border border-slate-200">
+              {(['all', 'pending', 'accepted', 'declined'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setOfferFilter(f)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-colors ${
+                    offerFilter === f
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {f === 'pending' ? 'Active Offers' : f}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filteredOffers.length === 0 ? (
+            <Card padding="lg" className="text-center text-slate-400 text-sm">
+              No offers matching the selected filter.
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {filteredOffers.map(offer => {
+                const discount = offer.originalPrice - offer.offeredPrice;
+                const exceedsBudget = offer.offeredPrice > maxBudget;
+
+                return (
+                  <Card
+                    key={offer.id}
+                    padding="md"
+                    className="border-slate-200 flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden"
+                  >
+                    <div>
+                      {/* Top Header */}
+                      <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={
+                                offer.status === 'pending'
+                                  ? 'warning'
+                                  : offer.status === 'accepted'
+                                  ? 'success'
+                                  : 'neutral'
+                              }
+                            >
+                              {offer.status === 'pending' && Date.parse(offer.expiryDate) <= Date.now() ? 'EXPIRED' : offer.status.toUpperCase()}
+                            </Badge>
+                            {exceedsBudget && (
+                              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                                <AlertTriangle size={11} /> Exceeds Filtered Budget
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-lg font-bold text-slate-900 mt-1">
+                            {offer.vehicleName}
+                          </h4>
+                          <p className="text-xs text-slate-500 font-medium">{offer.variantName}</p>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-xs text-slate-500 block">
+                            Listed when sent {formatCurrency(offer.originalPrice)}
+                          </span>
+                          <span className="text-2xl font-black text-blue-600 block">
+                            {formatCurrency(offer.offeredPrice)}
+                          </span>
+                          {discount > 0 && (
+                            <span className="text-[11px] font-bold text-emerald-600">
+                              Save {formatCurrency(discount)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Specs and Dealer details grid */}
+                      <div className="grid grid-cols-2 gap-2 text-xs py-3">
+                        <div className="p-2.5 bg-slate-50 rounded-lg">
+                          <span className="text-[10px] text-slate-400 block font-semibold uppercase">Offered Colour</span>
+                          <span className="font-bold text-slate-800">{offer.color || 'Choice of In-Stock'}</span>
+                        </div>
+
+                        <div className="p-2.5 bg-slate-50 rounded-lg">
+                          <span className="text-[10px] text-slate-400 block font-semibold uppercase">Expected Delivery</span>
+                          <span className="font-bold text-slate-800">{offer.expectedDeliveryDate ? formatDate(offer.expectedDeliveryDate) : 'Within 7 days'}</span>
+                        </div>
+                      </div>
+
+                      {/* Dealership Info Box */}
+                      <div className="p-3 bg-blue-50/50 rounded-xl text-xs space-y-1 mb-3 border border-blue-100">
+                        <p className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <Building2 size={13} className="text-blue-600" />
+                          {offer.dealerName}
+                        </p>
+                        <p className="text-slate-600">{offer.notes}</p>
+                        {offer.terms && (
+                          <p className="text-[11px] text-slate-500 pt-1 border-t border-blue-100 mt-1">
+                            <strong>Terms:</strong> {offer.terms}
+                          </p>
+                        )}
+                        <p className="text-[11px] text-amber-700 font-medium flex items-center gap-1 pt-1">
+                          <Clock size={11} /> Offer valid until {formatDate(offer.expiryDate)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleCompareOfferWithMarket(offer)}
+                        leftIcon={<TrendingDown size={14} className="text-blue-600" />}
+                      >
+                        Compare with Market
+                      </Button>
+
+                      {offer.status === 'pending' && Date.parse(offer.expiryDate) > Date.now() && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setDecliningOffer(offer)}
+                            leftIcon={<XCircle size={14} />}
+                          >
+                            Decline
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => setAcceptingOffer(offer)}
+                            leftIcon={<Lock size={14} />}
+                          >
+                            Accept & Lock Price
+                          </Button>
+                        </div>
+                      )}
+
+                      {offer.status === 'accepted' && (
+                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                          <CheckCircle2 size={14} /> Price Locked & Booking Created
+                        </span>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: CUSTOMER BOOKINGS & PRICE LOCK STATUS                               */}
+      {/* ========================================================================= */}
+      {activeTab === 'bookings' && (
+        <div className="space-y-4">
+          <div className="p-5 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">My Vehicle Bookings & Price Locks</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Track your active vehicle reservations, showroom visits, locked pricing, and booking lifecycle history.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-200">
+              <button
+                onClick={() => setBookingFilter('all')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  bookingFilter === 'all' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All ({bookings.length})
+              </button>
+              <button
+                onClick={() => setBookingFilter('active')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  bookingFilter === 'active' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Active Bookings
+              </button>
+              <button
+                onClick={() => setBookingFilter('history')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  bookingFilter === 'history' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Booking History
+              </button>
+            </div>
+          </div>
+
+          {filteredBookings.length === 0 ? (
+            <Card padding="lg" className="text-center text-slate-400 text-sm">
+              You have no bookings matching the selected filter.
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {filteredBookings.map(b => {
+                const isLockActive = new Date(b.priceLockedUntil).getTime() > Date.now();
+
+                return (
+                  <Card key={b.id} padding="none" className="border-slate-200 overflow-hidden shadow-sm">
+                    {/* Top Price Lock Strip */}
+                    <div className="bg-slate-900 text-white px-5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Lock size={14} className="text-emerald-400" />
+                        <span className="font-semibold text-slate-200">Guaranteed Locked Price:</span>
+                        <span className="text-emerald-400 font-extrabold text-sm">
+                          {formatCurrency(b.lockedPrice)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400">Lock Expiration:</span>
+                        <span className="font-semibold text-slate-200">
+                          {formatDate(b.priceLockedUntil)}
+                        </span>
+                        {isLockActive ? (
+                          <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-bold">
+                            Active Lock
+                          </span>
+                        ) : (
+                          <span className="bg-red-500/20 text-red-400 px-2 py-0.5 rounded text-[10px] font-bold">
+                            Lock Expired
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-5 space-y-4">
+                      {/* Vehicle Title & Status */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                        <div>
+                          <div className="flex items-center gap-2.5">
+                            <h4 className="text-lg font-bold text-slate-900">
+                              {b.vehicleName || b.listing?.brand || 'Vehicle'} {b.variantName || b.listing?.variant || ''}
+                            </h4>
+                            {getBookingStatusBadge(b.status)}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Booking ID: <code className="font-mono text-slate-700">{b.id}</code> • Scheduled Date: <strong>{formatDate(b.bookingDate)}</strong>
+                          </p>
+                        </div>
+
+                        {['pending', 'confirmed'].includes(b.status) && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setCancellingBooking(b)}
+                            className="text-red-600 hover:bg-red-50"
+                          >
+                            Cancel Booking
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Workflow Lifecycle Stepper */}
+                      <div className="p-3.5 bg-slate-50 rounded-xl">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                          Booking Progress Lifecycle
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+                          {[
+                            { key: 'pending', label: '1. Pending' },
+                            { key: 'confirmed', label: '2. Confirmed' },
+                            { key: 'payment_pending', label: '3. Payment' },
+                            { key: 'booked', label: '4. Booked' },
+                            { key: 'completed', label: '5. Completed' },
+                          ].map(step => {
+                            const statuses: BookingStatus[] = ['pending', 'confirmed', 'payment_pending', 'booked', 'completed'];
+                            const currentIndex = statuses.indexOf(b.status);
+                            const stepIndex = statuses.indexOf(step.key as BookingStatus);
+                            const isDone = currentIndex >= stepIndex && b.status !== 'cancelled';
+                            const isCurrent = b.status === step.key;
+
+                            return (
+                              <div
+                                key={step.key}
+                                className={`p-2 rounded-lg border font-semibold ${
+                                  isCurrent
+                                    ? 'bg-blue-600 text-white border-blue-600'
+                                    : isDone
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-white text-slate-400 border-slate-200'
+                                }`}
+                              >
+                                {step.label}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Dealer Contact & Booking Notes */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        <div className="p-3.5 bg-slate-50 rounded-xl space-y-1.5 border border-slate-100">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                            Dealership Showroom Contact
+                          </span>
+                          <p className="font-bold text-slate-900 flex items-center gap-1.5">
+                            <Building2 size={13} className="text-blue-600" />
+                            {b.dealer?.dealershipName || 'Premier Auto Group'}
+                          </p>
+                          <p className="text-slate-600 flex items-center gap-1.5">
+                            <MapPin size={12} className="text-slate-400" />
+                            {b.dealer?.address || '1234 Motor Avenue'}, {b.dealer?.city || 'Los Angeles'}, {b.dealer?.state || 'CA'} ({b.dealer?.pinCode || '90025'})
+                          </p>
+                          <p className="text-slate-600 flex items-center gap-1.5">
+                            <Phone size={12} className="text-slate-400" />
+                            Direct Phone: <a href={`tel:${b.dealer?.phone}`} className="text-blue-600 font-semibold hover:underline">{b.dealer?.phone || '+1 (310) 555-0100'}</a>
+                          </p>
+                          <p className="text-slate-600 flex items-center gap-1.5">
+                            <UserIcon size={12} className="text-slate-400" />
+                            Contact Person: {b.dealer?.contactPerson || 'Dealership Representative'}
+                          </p>
+                        </div>
+
+                        <div className="p-3.5 bg-slate-50 rounded-xl space-y-2 border border-slate-100">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                            Notes & Audit Log
+                          </span>
+                          <p className="text-slate-600">{b.notes || 'No special requests submitted.'}</p>
+                          {b.statusHistory && b.statusHistory.length > 0 && (
+                            <div className="pt-2 border-t border-slate-200 space-y-1">
+                              {b.statusHistory.map((hist, idx) => (
+                                <p key={idx} className="text-[11px] text-slate-500">
+                                  • <strong className="text-slate-700">{formatDate(hist.timestamp)}:</strong> {hist.note || hist.status}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: ACTIVE QUEUES                                                      */}
       {/* ========================================================================= */}
       {activeTab === 'queues' && (
         <Card padding="none">
@@ -1379,149 +1867,204 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 4: RECEIVED OFFERS                                                    */}
+      {/* MODAL: ACCEPT OFFER & LOCK PRICE                                          */}
       {/* ========================================================================= */}
-      {activeTab === 'offers' && (
-        <div className="space-y-4">
-          <div className="p-5 bg-white border border-slate-200 rounded-xl">
-            <h3 className="text-base font-bold text-slate-900">Dealer Offers</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Personalized pricing and incentives sent directly to you by certified dealerships.
-            </p>
-          </div>
-
-          {offers.length === 0 ? (
-            <Card padding="lg" className="text-center text-slate-400 text-sm">
-              No current dealer offers available.
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {offers.map(offer => {
-                const discount = offer.originalPrice - offer.offeredPrice;
-                return (
-                  <Card key={offer.id} padding="md" className="border-slate-200 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <Badge variant={offer.status === 'pending' ? 'warning' : offer.status === 'accepted' ? 'success' : 'neutral'}>
-                            {offer.status.toUpperCase()}
-                          </Badge>
-                          <h4 className="text-base font-bold text-slate-900 mt-2">{offer.vehicleName}</h4>
-                          <p className="text-xs text-slate-500">{offer.variantName || 'Special Queue Allocation'}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-xs line-through text-slate-400 block">
-                            {formatCurrency(offer.originalPrice)}
-                          </span>
-                          <span className="text-xl font-bold text-blue-600 block">
-                            {formatCurrency(offer.offeredPrice)}
-                          </span>
-                          {discount > 0 && (
-                            <span className="text-[11px] font-semibold text-emerald-600">
-                              Save {formatCurrency(discount)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="p-3 bg-slate-50 rounded-lg text-xs text-slate-600 space-y-1 my-3">
-                        <p className="font-semibold text-slate-800 flex items-center gap-1.5">
-                          <Building2 size={13} className="text-slate-400" />
-                          {offer.dealerName}
-                        </p>
-                        <p className="text-slate-500">{offer.notes}</p>
-                        <p className="text-[11px] text-amber-700 pt-1 font-medium flex items-center gap-1">
-                          <Clock size={11} /> Valid through {formatDate(offer.expiryDate)}
-                        </p>
-                      </div>
-                    </div>
-
-                    {offer.status === 'pending' && (
-                      <div className="flex gap-2 pt-2 border-t border-slate-100">
-                        <Button
-                          className="flex-1"
-                          size="sm"
-                          onClick={() => handleOfferResponse(offer.id, 'accepted')}
-                          leftIcon={<CheckCircle2 size={14} />}
-                        >
-                          Accept Offer
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => handleOfferResponse(offer.id, 'declined')}
-                          leftIcon={<XCircle size={14} />}
-                        >
-                          Decline
-                        </Button>
-                      </div>
-                    )}
-                  </Card>
-                );
-              })}
+      {acceptingOffer && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Lock size={18} className="text-emerald-600" />
+                <h3 className="text-base font-bold text-slate-900">Accept Offer & Lock Price</h3>
+              </div>
+              <button
+                onClick={() => setAcceptingOffer(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
+              >
+                ✕
+              </button>
             </div>
-          )}
+
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
+              <p className="font-bold text-emerald-900">
+                {acceptingOffer.vehicleName} ({acceptingOffer.variantName})
+              </p>
+              <p className="text-emerald-700">
+                Dealership: <strong>{acceptingOffer.dealerName}</strong>
+              </p>
+              <p className="text-base font-black text-emerald-800 pt-1">
+                Accepted Price: {formatCurrency(acceptingOffer.offeredPrice)}
+              </p>
+            </div>
+
+            {/* Configurable Price Lock Duration */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Configurable Price Lock Duration:
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[24, 48, 72, 168].map(hrs => (
+                  <button
+                    key={hrs}
+                    type="button"
+                    onClick={() => setLockDurationHours(hrs)}
+                    className={`py-2 px-2 text-xs font-semibold rounded-lg border text-center transition-colors ${
+                      lockDurationHours === hrs
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {hrs === 168 ? '7 Days' : `${hrs} Hours`}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1.5">
+                During this period, the dealer cannot increase the price or alter terms.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setAcceptingOffer(null)}
+                disabled={isAcceptingOffer}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleConfirmAcceptOffer}
+                isLoading={isAcceptingOffer}
+                leftIcon={<Lock size={14} />}
+              >
+                Confirm Price Lock & Book
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 5: MY BOOKINGS                                                        */}
+      {/* MODAL: DECLINE OFFER                                                      */}
       {/* ========================================================================= */}
-      {activeTab === 'bookings' && (
-        <Card padding="none">
-          <div className="p-5 border-b border-slate-100">
-            <CardHeader
-              title="My Vehicle Bookings"
-              subtitle="Track your scheduled showroom visits, test drives, and vehicle reservations."
-            />
+      {decliningOffer && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">Decline Dealer Offer</h3>
+              <button
+                onClick={() => setDecliningOffer(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Are you sure you want to decline the offer from{' '}
+              <strong>{decliningOffer.dealerName}</strong> for{' '}
+              <strong>{formatCurrency(decliningOffer.offeredPrice)}</strong>?
+            </p>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Reason for declining (Optional)
+              </label>
+              <select
+                value={declineReason}
+                onChange={e => setDeclineReason(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select a reason...</option>
+                <option value="Exceeds my budget">Exceeds my budget</option>
+                <option value="Found a better price with another dealer">Found a better price with another dealer</option>
+                <option value="Delivery timeline is too long">Delivery timeline is too long</option>
+                <option value="Colour or trim preference not met">Colour or trim preference not met</option>
+                <option value="No longer interested in this model">No longer interested in this model</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setDecliningOffer(null)}
+                disabled={isDecliningOffer}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleConfirmDeclineOffer}
+                isLoading={isDecliningOffer}
+              >
+                Decline Offer
+              </Button>
+            </div>
           </div>
-
-          {bookings.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-sm">
-              You have no active bookings.
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {bookings.map(b => (
-                <div key={b.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                      <Calendar size={22} />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-base font-bold text-slate-900">
-                          {b.listing?.brand || 'Vehicle'} {b.listing?.model || 'Booking'}
-                        </h4>
-                        <Badge variant={b.status === 'confirmed' ? 'success' : 'warning'} size="sm">
-                          {b.status}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Dealership: <span className="font-semibold text-slate-700">{b.dealer?.dealershipName}</span> • {b.dealer?.address}, {b.dealer?.city} ({b.dealer?.pinCode})
-                      </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Notes: {b.notes || 'Test drive & inspection reservation.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <p className="text-xs text-slate-400">Scheduled Date</p>
-                    <p className="text-sm font-semibold text-slate-800">{formatDate(b.bookingDate)}</p>
-                    <p className="text-xs text-blue-600 font-medium mt-1">Showroom Phone: {b.dealer?.phone}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+        </div>
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 1: BOOK SHOWROOM VISIT / TEST DRIVE                                 */}
+      {/* MODAL: CANCEL BOOKING                                                     */}
       {/* ========================================================================= */}
+      {cancellingBooking && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">Cancel Booking</h3>
+              <button
+                onClick={() => setCancellingBooking(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Are you sure you want to cancel your booking for{' '}
+              <strong>{cancellingBooking.vehicleName || 'Vehicle'}</strong> with{' '}
+              <strong>{cancellingBooking.dealer?.dealershipName || 'the dealership'}</strong>?
+            </p>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Reason for Cancellation
+              </label>
+              <textarea
+                rows={2}
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                placeholder="E.g., Schedule conflict, decided on different model..."
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setCancellingBooking(null)}
+                disabled={isCancellingBooking}
+              >
+                Keep Booking
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleConfirmCancelBooking}
+                isLoading={isCancellingBooking}
+              >
+                Confirm Cancellation
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DIRECT BOOKING */}
       {bookingVehicle && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 space-y-4">
@@ -1552,7 +2095,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                   Location: {bookingVehicle.dealer?.address}, {bookingVehicle.dealer?.city} ({bookingVehicle.dealer?.pinCode})
                 </p>
                 <p className="text-blue-700 font-semibold pt-1">
-                  Offered Price: {formatCurrency(bookingVehicle.dealerOfferPrice)} • Timeline: {bookingVehicle.deliveryTimeline}
+                  Guaranteed Offer: {formatCurrency(bookingVehicle.dealerOfferPrice)} • Timeline: {bookingVehicle.deliveryTimeline}
                 </p>
               </div>
 
@@ -1601,9 +2144,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL 2: JOIN QUEUE                                                       */}
-      {/* ========================================================================= */}
+      {/* MODAL: JOIN QUEUE */}
       {queueModalVehicle && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">

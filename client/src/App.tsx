@@ -79,7 +79,7 @@ function App() {
             path="queue"
             element={
               <RequireAuth allowedRoles={['customer']}>
-                <CustomerDashboard />
+                <CustomerDashboard initialTab="queues" />
               </RequireAuth>
             }
           />
@@ -87,7 +87,7 @@ function App() {
             path="bookings"
             element={
               <RequireAuth allowedRoles={['customer']}>
-                <CustomerDashboard />
+                <CustomerDashboard initialTab="bookings" />
               </RequireAuth>
             }
           />

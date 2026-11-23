@@ -55,6 +55,9 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
   };
 
   vehicles = {
+    getPriceChanges: async () => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
     getAll: async (_filters?: Record<string, unknown>): Promise<ApiResponse<VehicleListing[]>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
@@ -112,6 +115,9 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
   };
 
   offers = {
+    accept: async (): Promise<ApiResponse<{ offer: Offer; bookingId: string }>> => {
+      throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
+    },
     getAll: async (): Promise<ApiResponse<Offer[]>> => {
       throw new Error('PostgresDatabaseAdapter: Please wire up your real database connection in .env');
     },
