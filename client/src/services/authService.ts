@@ -1,3 +1,6 @@
+import { demandFixtures } from '../../../src/data/demandFixtures';
+import { dealerService, registerMockDealer } from './dealerService';
+import { mockAudit } from './mockAudit';
 import { ApiResponse, User, RegisterData } from '../types';
 
 function getAPI() {
@@ -14,6 +17,7 @@ export interface LoginCredentials {
 
 // Fallback in-memory demo data for browser dev mode
 const mockBrowserUsers: User[] = [
+  ...demandFixtures().users,
   {
     id: 'u1',
     name: 'Alice Johnson',
@@ -56,7 +60,43 @@ const mockBrowserUsers: User[] = [
   },
 ];
 
+const mockPasswords = new Map([
+  ['u1', 'demo1234'], ['u2', 'demo1234'], ['u3', 'demo1234'],
+]);
+
+export function isMockAdmin(id: string) {
+  return mockBrowserUsers.some(user => user.id === id && user.role === 'admin');
+}
+
+export function isMockCustomerSuspended(id: string) {
+  return mockBrowserUsers.some(user => user.id === id && user.status === 'suspended');
+}
+
 export const authService = {
+  async getUserById(id: string): Promise<ApiResponse<User>> {
+    const api = getAPI();
+    if (api?.auth?.getUserById) return api.auth.getUserById(id) as Promise<ApiResponse<User>>;
+    const user = mockBrowserUsers.find(item => item.id === id);
+    if (!user) return { success: false, error: 'User not found.' };
+    const dealerProfile = user.dealerProfile ? (await dealerService.getById(user.dealerProfile.id)).data : undefined;
+    return { success: true, data: { ...user, dealerProfile } };
+  },
+
+  updateMockCustomerStatus(id: string, status: 'active' | 'suspended', actorId: string): ApiResponse<User> {
+    if (!isMockAdmin(actorId)) {
+      return { success: false, error: 'Administrator access is required.' };
+    }
+    if (status !== 'active' && status !== 'suspended') return { success: false, error: 'Invalid customer status.' };
+    const user = mockBrowserUsers.find(item => item.id === id && item.role === 'customer');
+    if (!user) return { success: false, error: 'Customer not found.' };
+    const previous = user.status ?? 'active';
+    if (previous !== status) {
+      user.status = status;
+      mockAudit.record('Customer account status changed', actorId, id, `${user.name} · ${previous} → ${status}`);
+    }
+    return { success: true, data: { ...user } };
+  },
+
   async login(credentials: LoginCredentials): Promise<ApiResponse<{ user: User; token: string }>> {
     const api = getAPI();
     if (api?.auth?.login) {
@@ -68,11 +108,15 @@ export const authService = {
     const normalizedEmail = credentials.email.trim().toLowerCase();
     const user = mockBrowserUsers.find(u => u.email.toLowerCase() === normalizedEmail);
 
-    if (user && credentials.password === 'demo1234') {
+    if (user && credentials.password === mockPasswords.get(user.id)) {
+      const profile = (await this.getUserById(user.id)).data;
+      if (profile?.status === 'suspended' || profile?.dealerProfile?.status === 'suspended') {
+        return { success: false, error: 'This account is suspended.' };
+      }
       return {
         success: true,
         data: {
-          user,
+          user: profile ?? user,
           token: `browser-token-${user.id}`,
         },
       };
@@ -130,7 +174,9 @@ export const authService = {
       };
     }
 
+    if (newUser.dealerProfile) registerMockDealer(newUser.dealerProfile);
     mockBrowserUsers.push(newUser);
+    mockPasswords.set(newId, data.password);
 
     return {
       success: true,

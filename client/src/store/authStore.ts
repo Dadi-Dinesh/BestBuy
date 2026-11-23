@@ -1,3 +1,4 @@
+import { authService } from '../services/authService';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '../types';
@@ -21,8 +22,10 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       setUser: (user, token) =>
         set({ user, token, isAuthenticated: !!user }),
-      logout: () =>
-        set({ user: null, token: null, isAuthenticated: false }),
+      logout: () => {
+        void authService.logout().catch(() => undefined);
+        set({ user: null, token: null, isAuthenticated: false });
+      },
       setLoading: (loading) => set({ isLoading: loading }),
     }),
     {

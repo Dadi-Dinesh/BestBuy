@@ -74,10 +74,10 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
       try {
         const [singleRes, allRes] = await Promise.all([
           vehicleService.getById(activeListingId),
-          vehicleService.getAll(),
+          vehicleService.getAll({ marketplace: true }),
         ]);
 
-        if (singleRes.success && singleRes.data) {
+        if (singleRes.success && singleRes.data && allRes.data?.some(item => item.id === activeListingId)) {
           setListing(singleRes.data);
 
           if (allRes.success && allRes.data) {
@@ -93,6 +93,9 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
             matching.sort((a, b) => a.dealerOfferPrice - b.dealerOfferPrice);
             setMatchingDealers(matching.length > 0 ? matching : [singleRes.data]);
           }
+        } else {
+          setListing(null);
+          setMatchingDealers([]);
         }
       } finally {
         setIsLoading(false);
@@ -117,6 +120,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
       vehicleModelId: listing.vehicleModelId,
       variantId: listing.variantId,
       city: listing.dealer?.city,
+      state: listing.dealer?.state,
     });
     setIsJoiningQueue(false);
     setShowQueueModal(false);

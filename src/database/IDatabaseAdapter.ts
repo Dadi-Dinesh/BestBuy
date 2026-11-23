@@ -1,3 +1,5 @@
+import type { AdminStats } from '../services/adminMetrics';
+import type { AuditEntry } from '../services/auditLog';
 import type { ListingPriceChange } from '../services/pricingService';
 import {
   User,
@@ -13,14 +15,7 @@ import {
   VehicleAvailabilityStatus,
 } from '../types';
 
-export interface AdminStats {
-  totalCustomers: number;
-  totalDealers: number;
-  totalVehicles: number;
-  activeQueues: number;
-  totalBookings: number;
-  pendingApprovals: number;
-}
+export type { AdminStats } from '../services/adminMetrics';
 
 export interface IDatabaseAdapter {
   readonly name: string;
@@ -42,18 +37,18 @@ export interface IDatabaseAdapter {
     update(id: string, data: UpdateVehicleListingData | Record<string, unknown>): Promise<ApiResponse<VehicleListing>>;
     updatePrice(id: string, prices: { exShowroomPrice?: number; onRoadPrice?: number; dealerOfferPrice: number }): Promise<ApiResponse<VehicleListing>>;
     updateAvailability(id: string, availability: VehicleAvailabilityStatus): Promise<ApiResponse<VehicleListing>>;
-    delete(id: string): Promise<ApiResponse<{ id: string }>>;
+    delete(id: string, actorId?: string, reason?: string): Promise<ApiResponse<{ id: string }>>;
   };
 
   dealers: {
     getAll(): Promise<ApiResponse<Dealer[]>>;
     getById(id: string): Promise<ApiResponse<Dealer>>;
     update(id: string, data: Record<string, unknown>): Promise<ApiResponse<Dealer>>;
-    updateStatus(id: string, status: Dealer['status']): Promise<ApiResponse<Dealer>>;
+    updateStatus(id: string, status: Dealer['status'], actorId?: string): Promise<ApiResponse<Dealer>>;
   };
 
   queue: {
-    join(data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string }): Promise<ApiResponse<QueueEntry>>;
+    join(data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string; state?: string }): Promise<ApiResponse<QueueEntry>>;
     getPosition(queueId: string): Promise<ApiResponse<{ position: number }>>;
     leave(queueId: string): Promise<ApiResponse<{ id: string }>>;
     getByCustomerId(customerId: string): Promise<ApiResponse<QueueEntry[]>>;
@@ -78,6 +73,8 @@ export interface IDatabaseAdapter {
   };
 
   admin: {
+    getAuditLog(): Promise<ApiResponse<AuditEntry[]>>;
+    updateCustomerStatus(id: string, status: 'active' | 'suspended', actorId: string): Promise<ApiResponse<User>>;
     getStats(): Promise<ApiResponse<AdminStats>>;
   };
 }

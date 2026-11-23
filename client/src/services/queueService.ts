@@ -1,3 +1,4 @@
+import { isMockCustomerSuspended } from './authService';
 import { demandFixtures } from '../../../src/data/demandFixtures';
 import { ApiResponse, QueueEntry } from '../types';
 
@@ -77,11 +78,12 @@ export const queueService = {
     const entry = mockQueues.find(queue => queue.id === id);
     if (entry && (entry.status === 'waiting' || entry.status === 'offered')) entry.status = 'booked';
   },
-  async join(data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string }): Promise<ApiResponse<QueueEntry>> {
+  async join(data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string; state?: string }): Promise<ApiResponse<QueueEntry>> {
     const api = getAPI();
     if (api?.queue?.join) {
       return api.queue.join(data) as Promise<ApiResponse<QueueEntry>>;
     }
+    if (isMockCustomerSuspended(data.customerId)) return { success: false, error: 'This customer account is suspended.' };
     const newEntry: QueueEntry = {
       id: `q${Date.now()}`,
       vehicleModelId: data.vehicleModelId,
@@ -115,7 +117,9 @@ export const queueService = {
       return api.queue.leave(queueId) as Promise<ApiResponse<{ id: string }>>;
     }
     const idx = mockQueues.findIndex(q => q.id === queueId);
-    if (idx !== -1) mockQueues[idx].status = 'cancelled';
+    if (idx === -1) return { success: false, error: 'Queue entry not found.' };
+    if (isMockCustomerSuspended(mockQueues[idx].customerId)) return { success: false, error: 'This customer account is suspended.' };
+    mockQueues[idx].status = 'cancelled';
     return { success: true, data: { id: queueId } };
   },
 

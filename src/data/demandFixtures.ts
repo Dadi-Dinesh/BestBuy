@@ -1,4 +1,4 @@
-import type { Booking, Offer, QueueEntry } from '../types';
+import type { Booking, Offer, QueueEntry, User } from '../types';
 
 export function demandFixtures(now = Date.now()) {
   const daysAgo = (days: number) => new Date(now - days * 86_400_000).toISOString();
@@ -39,5 +39,20 @@ export function demandFixtures(now = Date.now()) {
     createdAt: daysAgo(4), bookingDate: daysAgo(1), lockedPrice: offers[1].offeredPrice,
     lockDurationHours: 72, priceLockedUntil: daysAgo(1),
   }];
-  return { queues, offers, bookings };
+  const users: User[] = [...buyers, {
+    customerId: 'demo-adrian', customerName: 'Adrian Lee',
+  }, {
+    customerId: 'demo-claire', customerName: 'Claire Bennett',
+  }].map((buyer, index) => ({
+    id: buyer.customerId, name: buyer.customerName,
+    email: `${buyer.customerName.toLowerCase().replace(' ', '.')}@example.com`,
+    role: 'customer', createdAt: daysAgo(10 + index * 22),
+  }));
+  bookings.push({
+    id: 'demo-booking-cancelled', customerId: 'demo-claire', customerName: 'Claire Bennett',
+    listingId: 'l6', dealerId: 'd2', vehicleName: 'Tesla Model Y', variantName: 'Long Range AWD',
+    status: 'cancelled', createdAt: daysAgo(6), updatedAt: daysAgo(3),
+    bookingDate: daysAgo(2), lockedPrice: 47990, lockDurationHours: 72, priceLockedUntil: daysAgo(3),
+  });
+  return { queues, offers, bookings, users };
 }

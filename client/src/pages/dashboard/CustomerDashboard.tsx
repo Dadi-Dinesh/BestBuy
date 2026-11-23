@@ -133,7 +133,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       setIsLoading(true);
       try {
         const [vRes, qRes, oRes, bRes] = await Promise.all([
-          vehicleService.getAll(),
+          vehicleService.getAll({ marketplace: true }),
           user ? queueService.getByCustomerId(user.id) : queueService.getAll(),
           user ? offerService.getByCustomerId(user.id) : offerService.getAll(),
           user ? bookingService.getByCustomerId(user.id) : bookingService.getAll(),
@@ -483,7 +483,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
     if (!res.success) {
       setActionMessage(res.error || 'The booking could not be created.');
-      const updated = await vehicleService.getAll();
+      const updated = await vehicleService.getAll({ marketplace: true });
       if (updated.success && updated.data) setVehicles(updated.data);
       setTimeout(() => setActionMessage(null), 4000);
     }
@@ -506,13 +506,15 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       vehicleModelId: queueModalVehicle.vehicleModelId,
       variantId: queueModalVehicle.variantId,
       city: queueModalVehicle.dealer?.city,
+      state: queueModalVehicle.dealer?.state,
     });
 
     setIsJoiningQueue(false);
     setQueueModalVehicle(null);
 
     if (res.success && res.data) {
-      setQueues(prev => [res.data!, ...prev]);
+      const joined = res.data;
+      setQueues(prev => [joined, ...prev.filter(entry => entry.id !== joined.id)]);
       setActionMessage(
         `Joined waitlist queue for ${queueModalVehicle.brand} ${queueModalVehicle.model}!`
       );

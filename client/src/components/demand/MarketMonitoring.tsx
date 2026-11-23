@@ -1,3 +1,4 @@
+import { useDemoMode } from '../../services/desktopMode';
 import { useEffect, useState } from 'react';
 import { Badge } from '../ui/Badge';
 import { Card, CardHeader } from '../ui/Card';
@@ -47,7 +48,7 @@ interface ChartPoint {
   value: number | null;
 }
 
-function BarChart({ title, points, format = String, maximum }: {
+export function BarChart({ title, points, format = String, maximum }: {
   title: string;
   points: ChartPoint[];
   format?: (value: number) => string;
@@ -87,6 +88,7 @@ function groupDemand(markets: Market[], group: (market: Market) => string) {
 }
 
 export function MarketMonitoring({ monitor, dealerId }: { monitor: ReturnType<typeof useMarketData>; dealerId?: string }) {
+  const demo = useDemoMode();
   const [selectedMarket, setSelectedMarket] = useState('');
   const [reviewOnly, setReviewOnly] = useState(false);
   const { data, error, markets, now, refresh } = monitor;
@@ -115,7 +117,7 @@ export function MarketMonitoring({ monitor, dealerId }: { monitor: ReturnType<ty
       <div className="flex flex-wrap justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900">Demand and pricing</h2>
-          <p className="text-sm text-slate-500">BestBuy demo activity. Scores use active buyers, active offers, stock, completed bookings and booking activity in the last seven days.</p>
+          <p className="text-sm text-slate-500">BestBuy {demo ? 'demo' : 'marketplace'} activity. Scores use active buyers, active offers, stock, completed bookings and booking activity in the last seven days.</p>
         </div>
         <button type="button" className="text-sm font-semibold text-blue-700" onClick={refresh}>Refresh data</button>
       </div>

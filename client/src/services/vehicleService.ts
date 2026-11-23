@@ -1,5 +1,9 @@
+import { expireMockListingOffers } from './offerService';
+import { recordPriceUpdate } from '../../../src/services/auditLog';
+import { isMockAdmin } from './authService';
+import { mockAudit } from './mockAudit';
 import { resolveVehicleIdentity } from '../../../src/services/vehicleIdentity';
-import { dealerService } from './dealerService';
+import { dealerService, mockDealerCanTrade } from './dealerService';
 import { pricingService, type ListingPriceChange } from '../../../src/services/pricingService';
 import {
   ApiResponse,
@@ -768,6 +772,7 @@ export const vehicleService = {
       results = results.filter(v => v.variant.toLowerCase() === (filters.variant as string).toLowerCase());
     }
 
+    if (filters?.marketplace) results = results.filter(listing => mockDealerCanTrade(listing.dealerId));
     return { success: true, data: results };
   },
 
@@ -793,6 +798,7 @@ export const vehicleService = {
 
     const dealerId = data.dealerId as string;
     const { data: dealer } = await dealerService.getById(dealerId);
+    if (!mockDealerCanTrade(dealerId)) return { success: false, error: 'Only approved dealers can publish inventory.' };
     const brand = (data.brand as string) || 'Toyota';
     const model = (data.model as string) || 'Camry';
     const variant = (data.variant as string) || 'Base';
@@ -829,6 +835,7 @@ export const vehicleService = {
     };
 
     mockBrowserVehicles.unshift(newListing);
+    mockAudit.record('Listing created', dealerId, newListing.id, `${brand} ${model} ${variant}`);
     return { success: true, data: newListing };
   },
 
@@ -842,6 +849,7 @@ export const vehicleService = {
     if (idx === -1) return { success: false, error: 'Vehicle not found' };
 
     const current = mockBrowserVehicles[idx];
+    if (!mockDealerCanTrade(current.dealerId)) return { success: false, error: 'Only approved dealers can update inventory.' };
     const offerPrice = data.dealerOfferPrice !== undefined
       ? Number(data.dealerOfferPrice)
       : data.price !== undefined
@@ -853,10 +861,14 @@ export const vehicleService = {
     mockBrowserVehicles[idx] = {
       ...current,
       ...data,
+      id: current.id,
+      dealerId: current.dealerId,
       ...pricingService.revise(current, offerPrice, new Date().toISOString()),
       updatedAt: new Date().toISOString(),
     };
 
+    mockAudit.record('Listing updated', current.dealerId, id, `${current.brand} ${current.model} ${current.variant}`);
+    recordPriceUpdate(mockAudit, current, mockBrowserVehicles[idx]);
     return { success: true, data: mockBrowserVehicles[idx] };
   },
 
@@ -874,6 +886,7 @@ export const vehicleService = {
 
     if (!pricingService.isValid(prices.dealerOfferPrice)) return { success: false, error: 'Enter a valid positive dealer price.' };
     const current = mockBrowserVehicles[idx];
+    if (!mockDealerCanTrade(current.dealerId)) return { success: false, error: 'Only approved dealers can update inventory.' };
     const updatedAt = new Date().toISOString();
     mockBrowserVehicles[idx] = {
       ...current,
@@ -883,6 +896,7 @@ export const vehicleService = {
       updatedAt,
     };
 
+    recordPriceUpdate(mockAudit, current, mockBrowserVehicles[idx]);
     return { success: true, data: mockBrowserVehicles[idx] };
   },
 
@@ -895,7 +909,10 @@ export const vehicleService = {
     const idx = mockBrowserVehicles.findIndex(v => v.id === id);
     if (idx === -1) return { success: false, error: 'Vehicle not found' };
 
-    mockBrowserVehicles[idx].availability = availability;
+    const listing = mockBrowserVehicles[idx];
+    if (!mockDealerCanTrade(listing.dealerId)) return { success: false, error: 'Only approved dealers can update inventory.' };
+    mockAudit.record('Listing updated', listing.dealerId, id, `Availability changed to ${availability.replace(/_/g, ' ')}`);
+    listing.availability = availability;
     if (availability === 'out_of_stock') {
       mockBrowserVehicles[idx].quantity = 0;
     }
@@ -904,13 +921,21 @@ export const vehicleService = {
     return { success: true, data: mockBrowserVehicles[idx] };
   },
 
-  async delete(id: string): Promise<ApiResponse<{ id: string }>> {
+  async delete(id: string, actorId?: string, reason?: string): Promise<ApiResponse<{ id: string }>> {
     const api = getAPI();
     if (api?.vehicles?.delete) {
-      return api.vehicles.delete(id) as Promise<ApiResponse<{ id: string }>>;
+      return api.vehicles.delete(id, actorId, reason) as Promise<ApiResponse<{ id: string }>>;
     }
     const listing = mockBrowserVehicles.find(vehicle => vehicle.id === id);
-    if (listing) archivedPriceChanges.push(...pricingService.listingChanges(listing));
+    if (!listing) return { success: false, error: 'Vehicle listing not found.' };
+    if (actorId ? !isMockAdmin(actorId) : !mockDealerCanTrade(listing.dealerId)) {
+      return { success: false, error: 'Listing removal is unavailable for this account.' };
+    }
+    if (actorId && !reason?.trim()) return { success: false, error: 'Provide a reason for removing the listing.' };
+    archivedPriceChanges.push(...pricingService.listingChanges(listing));
+    expireMockListingOffers(id);
+    mockAudit.record('Listing removed', actorId || listing.dealerId, id,
+      `${listing.brand} ${listing.model} ${listing.variant}${reason?.trim() ? ` · ${reason.trim()}` : ''}`);
     mockBrowserVehicles = mockBrowserVehicles.filter(v => v.id !== id);
     return { success: true, data: { id } };
   },

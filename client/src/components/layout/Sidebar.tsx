@@ -13,6 +13,7 @@ import {
   ChevronRight,
   TrendingDown,
 } from 'lucide-react';
+import { useDemoMode } from '../../services/desktopMode';
 import { useAuthStore } from '../../store/authStore';
 import { cn } from '../../utils/helpers';
 
@@ -31,9 +32,12 @@ const navItems: NavItem[] = [
   { label: 'My Bookings', to: '/bookings', icon: <BookOpen size={18} />, roles: ['customer'] },
   { label: 'My Inventory', to: '/inventory', icon: <Car size={18} />, roles: ['dealer'] },
   { label: 'Dealership', to: '/dealership', icon: <Building2 size={18} />, roles: ['dealer'] },
-  { label: 'All Users', to: '/admin/users', icon: <Users size={18} />, roles: ['admin'] },
-  { label: 'All Dealers', to: '/admin/dealers', icon: <Building2 size={18} />, roles: ['admin'] },
-  { label: 'All Listings', to: '/admin/listings', icon: <Car size={18} />, roles: ['admin'] },
+  { label: 'Customers', to: '/admin/users', icon: <Users size={18} />, roles: ['admin'] },
+  { label: 'Dealers', to: '/admin/dealers', icon: <Building2 size={18} />, roles: ['admin'] },
+  { label: 'Listings', to: '/admin/listings', icon: <Car size={18} />, roles: ['admin'] },
+  { label: 'Shared Queues', to: '/admin/queues', icon: <ClipboardList size={18} />, roles: ['admin'] },
+  { label: 'Reports', to: '/admin/reports', icon: <TrendingDown size={18} />, roles: ['admin'] },
+  { label: 'Audit Log', to: '/admin/audit', icon: <BookOpen size={18} />, roles: ['admin'] },
   { label: 'Switch Role', to: '/role-selection', icon: <Users size={18} />, roles: ['customer', 'dealer', 'admin'] },
   { label: 'Settings', to: '/settings', icon: <Settings size={18} />, roles: ['customer', 'dealer', 'admin'] },
 ];
@@ -41,9 +45,10 @@ const navItems: NavItem[] = [
 export const Sidebar: React.FC = () => {
   const { user, logout } = useAuthStore();
   useLocation();
+  const demo = useDemoMode();
 
   const filteredItems = navItems.filter(item =>
-    user ? item.roles.includes(user.role) : false
+    user ? item.roles.includes(user.role) && (demo || item.to !== '/role-selection') : false
   );
 
   return (

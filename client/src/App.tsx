@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LoadingScreen } from './pages/LoadingScreen';
 import { LoginPage } from './pages/LoginPage';
@@ -11,6 +11,7 @@ import { AdminDashboard } from './pages/dashboard/AdminDashboard';
 import { DealershipProfilePage } from './pages/dealer/DealershipProfilePage';
 import { VehicleDetailsPage } from './pages/vehicle/VehicleDetailsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { authService } from './services/authService';
 import { useAuthStore } from './store/authStore';
 import type { UserRole } from './types';
 
@@ -30,6 +31,38 @@ function RequireAuth({ children, allowedRoles }: { children: React.ReactNode; al
   return <>{children}</>;
 }
 
+function AuthenticatedLayout() {
+  const { user, token, logout, setUser } = useAuthStore();
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    async function checkAccount() {
+      try {
+        const result = await authService.getUserById(userId!);
+        if (!active) return;
+        if (!result.success || !result.data || result.data.status === 'suspended' ||
+            result.data.dealerProfile?.status === 'suspended') {
+          logout();
+        } else if (result.data.dealerProfile?.status !== useAuthStore.getState().user?.dealerProfile?.status) {
+          setUser(result.data, token);
+        }
+      } catch {
+        // An unavailable adapter is handled by the current screen.
+      }
+    }
+    void checkAccount();
+    window.addEventListener('focus', checkAccount);
+    const timer = window.setInterval(checkAccount, 15_000);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', checkAccount);
+      window.clearInterval(timer);
+    };
+  }, [userId, token, logout, setUser]);
+  return <MainLayout />;
+}
+
 function App() {
   const [isLoading, setIsLoading] = useState(true);
 
@@ -46,7 +79,7 @@ function App() {
         <Route path="/role-selection" element={<RoleSelectionPage />} />
 
         {/* Authenticated Application Layout */}
-        <Route path="/" element={<RequireAuth><MainLayout /></RequireAuth>}>
+        <Route path="/" element={<RequireAuth><AuthenticatedLayout /></RequireAuth>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<RoleDashboard />} />
 
@@ -111,30 +144,7 @@ function App() {
           />
 
           {/* Admin-only protected routes */}
-          <Route
-            path="admin/users"
-            element={
-              <RequireAuth allowedRoles={['admin']}>
-                <AdminDashboard />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="admin/dealers"
-            element={
-              <RequireAuth allowedRoles={['admin']}>
-                <AdminDashboard />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="admin/listings"
-            element={
-              <RequireAuth allowedRoles={['admin']}>
-                <AdminDashboard />
-              </RequireAuth>
-            }
-          />
+          <Route path="admin/*" element={<RequireAuth allowedRoles={['admin']}><AdminDashboard /></RequireAuth>} />
 
           {/* Shared authenticated routes */}
           <Route path="settings" element={<SettingsPage />} />

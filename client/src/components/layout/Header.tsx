@@ -10,32 +10,53 @@ import {
   Clock,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { desktopAPI, useDemoMode } from '../../services/desktopMode';
 import { notificationService } from '../../services/notificationService';
 import { Notification } from '../../types';
 import { getInitials, formatDate } from '../../utils/helpers';
 
 export const Header: React.FC = () => {
   const { user } = useAuthStore();
+  const demo = useDemoMode();
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
-    const unsubscribe = notificationService.subscribe(all => {
-      // Filter by current user or global
-      if (user) {
-        setNotifications(all.filter(n => !n.userId || n.userId === user.id));
-      } else {
-        setNotifications(all);
+    if (demo) {
+      return notificationService.subscribe(all => setNotifications(all.filter(n => !n.userId || n.userId === user?.id)));
+    }
+    const api = desktopAPI();
+    if (!api || !user) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const result = await api.notifications.getAll();
+        if (active && result.data) setNotifications(result.data);
+      } catch {
+        // Notifications are optional when the desktop is offline or in demo mode.
       }
-    });
-    return unsubscribe;
-  }, [user]);
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 20_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [demo, user]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  const handleMarkAllRead = () => {
-    notificationService.markAllAsRead(user?.id);
-  };
+  async function markRead(id?: string) {
+    if (demo) {
+      if (id) notificationService.markAsRead(id);
+      else notificationService.markAllAsRead(user?.id);
+      return;
+    }
+    try {
+      if ((await desktopAPI()?.notifications.markRead(id))?.success) {
+        setNotifications(list => list.map(item => !id || item.id === id ? { ...item, isRead:true } : item));
+      }
+    } catch {
+      // Leave the unread state intact if the update failed.
+    }
+  }
 
   const getCategoryIcon = (category?: Notification['category']) => {
     switch (category) {
@@ -83,7 +104,7 @@ export const Header: React.FC = () => {
                 </div>
                 {unreadCount > 0 && (
                   <button
-                    onClick={handleMarkAllRead}
+                    onClick={() => void markRead()}
                     className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                   >
                     Mark all read
@@ -100,7 +121,7 @@ export const Header: React.FC = () => {
                   notifications.map(n => (
                     <div
                       key={n.id}
-                      onClick={() => notificationService.markAsRead(n.id)}
+                      onClick={() => void markRead(n.id)}
                       className={`px-4 py-3 cursor-pointer transition-colors hover:bg-slate-50 ${
                         !n.isRead ? 'bg-blue-50/40' : ''
                       }`}

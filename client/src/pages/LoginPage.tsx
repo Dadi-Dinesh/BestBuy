@@ -1,3 +1,4 @@
+import { useDemoMode } from '../services/desktopMode';
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Car, Mail, Lock, Eye, EyeOff, AlertCircle, ShoppingBag, Store, ShieldCheck } from 'lucide-react';
@@ -61,6 +62,8 @@ export const LoginPage: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  const demo = useDemoMode();
 
   const fillDemo = (role: UserRole) => {
     setEmail(`${role}@demo.com`);
@@ -142,7 +145,7 @@ export const LoginPage: React.FC = () => {
             </Button>
           </form>
 
-          {/* Quick Demo Switcher */}
+          {demo &&
           <div className="mt-8 pt-5 border-t border-slate-100">
             <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2.5 text-center">
               Quick Demo Accounts (Password: demo1234)
@@ -178,7 +181,7 @@ export const LoginPage: React.FC = () => {
                 <span className="text-[10px] text-slate-400">System</span>
               </button>
             </div>
-          </div>
+          </div>}
         </div>
 
         {/* Links */}
@@ -191,9 +194,9 @@ export const LoginPage: React.FC = () => {
           </p>
           <p>
             Want to see all role features?{' '}
-            <Link to="/role-selection" className="text-blue-600 font-semibold hover:underline">
+            {demo && <Link to="/role-selection" className="text-blue-600 font-semibold hover:underline">
               Browse role catalog
-            </Link>
+            </Link>}
           </p>
         </div>
       </div>

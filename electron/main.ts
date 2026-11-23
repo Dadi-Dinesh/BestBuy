@@ -1,13 +1,15 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as dotenv from 'dotenv';
 import { registerIpcHandlers } from './ipcHandlers';
+import { getDatabaseAdapter, type IDatabaseAdapter } from '../src/database';
 
 // Load environment variables from .env
-dotenv.config();
+dotenv.config({ path: app.isPackaged ? path.join(app.getPath('userData'), '.env') : undefined, quiet: true });
+let adapter: IDatabaseAdapter | undefined;
 
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const isDev = process.env.DATA_ADAPTER !== 'postgres' && (process.env.NODE_ENV === 'development' || !app.isPackaged);
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -34,12 +36,14 @@ function createWindow(): void {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
     show: false,
     ...(iconPath ? { icon: iconPath } : {}),
   });
 
+  mainWindow.webContents.on('will-navigate', event => event.preventDefault());
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else if (isDev && !process.env.ELECTRON_START_URL) {
@@ -75,8 +79,16 @@ function createWindow(): void {
   });
 }
 
-app.whenReady().then(() => {
-  registerIpcHandlers(ipcMain);
+app.whenReady().then(async () => {
+  try {
+    adapter = getDatabaseAdapter();
+    await adapter.connect();
+    registerIpcHandlers(ipcMain, adapter);
+  } catch {
+    dialog.showErrorBox('BestBuy database unavailable', 'Check the database configuration and apply the BestBuy schema before starting.');
+    app.quit();
+    return;
+  }
   createWindow();
 
   if (process.env.TEST_BOOT === 'true') {
@@ -98,3 +110,5 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+app.on('before-quit', () => { void adapter?.disconnect().catch(() => undefined); });

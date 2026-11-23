@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { RegisterData, Dealer, Offer, Booking } from '../src/types';
 
 const electronAPI = {
+  usesDatabase: () => ipcRenderer.invoke('app:usesDatabase') as Promise<boolean>,
+  notifications: {
+    getAll: () => ipcRenderer.invoke('notifications:getAll'),
+    markRead: (id?: string) => ipcRenderer.invoke('notifications:markRead',id),
+  },
   // Auth
   auth: {
     login: (credentials: { email: string; password: string }) =>
@@ -27,7 +32,7 @@ const electronAPI = {
       ipcRenderer.invoke('vehicles:updatePrice', id, prices),
     updateAvailability: (id: string, availability: string) =>
       ipcRenderer.invoke('vehicles:updateAvailability', id, availability),
-    delete: (id: string) => ipcRenderer.invoke('vehicles:delete', id),
+    delete: (id: string, actorId?: string, reason?: string) => ipcRenderer.invoke('vehicles:delete', id, actorId, reason),
   },
 
   // Dealers
@@ -36,13 +41,13 @@ const electronAPI = {
     getById: (id: string) => ipcRenderer.invoke('dealers:getById', id),
     update: (id: string, data: Record<string, unknown>) =>
       ipcRenderer.invoke('dealers:update', id, data),
-    updateStatus: (id: string, status: Dealer['status']) =>
-      ipcRenderer.invoke('dealers:updateStatus', id, status),
+    updateStatus: (id: string, status: Dealer['status'], actorId?: string) =>
+      ipcRenderer.invoke('dealers:updateStatus', id, status, actorId),
   },
 
   // Queue
   queue: {
-    join: (data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string }) =>
+    join: (data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string; state?: string }) =>
       ipcRenderer.invoke('queue:join', data),
     getPosition: (queueId: string) =>
       ipcRenderer.invoke('queue:getPosition', queueId),
@@ -83,6 +88,9 @@ const electronAPI = {
 
   // Admin
   admin: {
+    getAuditLog: () => ipcRenderer.invoke('admin:getAuditLog'),
+    updateCustomerStatus: (id: string, status: 'active' | 'suspended', actorId: string) =>
+      ipcRenderer.invoke('admin:updateCustomerStatus', id, status, actorId),
     getStats: () => ipcRenderer.invoke('admin:getStats'),
   },
 };

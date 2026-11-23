@@ -1,3 +1,5 @@
+import { createAuditLog, recordPriceUpdate } from '../../services/auditLog';
+import { adminMetrics } from '../../services/adminMetrics';
 import { resolveVehicleIdentity } from '../../services/vehicleIdentity';
 import { demandFixtures } from '../../data/demandFixtures';
 import { pricingService, type ListingPriceChange } from '../../services/pricingService';
@@ -20,7 +22,21 @@ import {
 export class MockDatabaseAdapter implements IDatabaseAdapter {
   readonly name = 'MockDatabaseAdapter';
 
+  private audit = createAuditLog();
+  private canAdmin(id: string) {
+    return this._users.some(user => user.id === id && user.role === 'admin');
+  }
+
+  private dealerCanTrade(id: string) {
+    return this._dealers.some(dealer => dealer.id === id && dealer.status === 'approved');
+  }
+
+  private customerSuspended(id: string) {
+    return this._users.some(user => user.id === id && user.status === 'suspended');
+  }
+
   private _users: User[] = [
+    ...demandFixtures().users,
     {
       id: 'u1',
       name: 'Alice Johnson',
@@ -825,7 +841,9 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       if (!user || this._passwords[user.email] !== credentials.password) {
         return { success: false, error: 'Invalid email address or password. Please check your credentials.' };
       }
+      if (user.status === 'suspended') return { success: false, error: 'This customer account is suspended.' };
       const dealer = user.role === 'dealer' ? this._dealers.find(d => d.userId === user.id) : undefined;
+      if (dealer?.status === 'suspended') return { success: false, error: 'This dealership is suspended.' };
       const userWithProfile: User = {
         ...user,
         dealerProfile: dealer,
@@ -887,7 +905,8 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     getUserById: async (id: string) => {
       const user = this._users.find(u => u.id === id);
       if (!user) return { success: false, error: 'User not found.' };
-      return { success: true, data: user };
+      const dealerProfile = user.role === 'dealer' ? this._dealers.find(dealer => dealer.userId === id) : undefined;
+      return { success: true, data: { ...user, dealerProfile } };
     },
 
     getAllUsers: async () => {
@@ -922,6 +941,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       if (filters?.variant) {
         result = result.filter(l => l.variant.toLowerCase() === (filters.variant as string).toLowerCase());
       }
+      if (filters?.marketplace) result = result.filter(listing => this.dealerCanTrade(listing.dealerId));
       const enriched = result.map(l => ({
         ...l,
         dealer: this._dealers.find(d => d.id === l.dealerId),
@@ -955,6 +975,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
 
       if (!pricingService.isValid(dealerOffer)) return { success: false, error: 'Enter a valid positive dealer price.' };
       const dealerId = (raw.dealerId as string) || 'd1';
+      if (!this.dealerCanTrade(dealerId)) return { success: false, error: 'Only approved dealers can publish inventory.' };
       const newListing: VehicleListing = {
         id: `l${Date.now()}`,
         dealerId,
@@ -987,6 +1008,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       };
 
       this._listings.unshift(newListing);
+      this.audit.record('Listing created', dealerId, newListing.id, `${brand} ${model} ${variant}`);
       return { success: true, data: newListing };
     },
 
@@ -995,6 +1017,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       if (idx === -1) return { success: false, error: 'Vehicle listing not found.' };
 
       const current = this._listings[idx];
+      if (!this.dealerCanTrade(current.dealerId)) return { success: false, error: 'Only approved dealers can update inventory.' };
       const updatedOfferPrice = data.dealerOfferPrice !== undefined
         ? Number(data.dealerOfferPrice)
         : data.price !== undefined
@@ -1006,9 +1029,13 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       this._listings[idx] = {
         ...current,
         ...data,
+        dealerId: current.dealerId,
+        id: current.id,
         ...pricingService.revise(current, updatedOfferPrice, new Date().toISOString()),
         updatedAt: new Date().toISOString(),
       };
+      this.audit.record('Listing updated', current.dealerId, id, `${current.brand} ${current.model} ${current.variant}`);
+      recordPriceUpdate(this.audit, current, this._listings[idx]);
       return { success: true, data: { ...this._listings[idx], dealer: this._dealers.find(dealer => dealer.id === this._listings[idx].dealerId) } };
     },
 
@@ -1021,6 +1048,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
 
       if (!pricingService.isValid(prices.dealerOfferPrice)) return { success: false, error: 'Enter a valid positive dealer price.' };
       const current = this._listings[idx];
+      if (!this.dealerCanTrade(current.dealerId)) return { success: false, error: 'Only approved dealers can update inventory.' };
       const updatedAt = new Date().toISOString();
       this._listings[idx] = {
         ...current,
@@ -1030,6 +1058,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
         updatedAt,
       };
 
+      recordPriceUpdate(this.audit, current, this._listings[idx]);
       return { success: true, data: { ...this._listings[idx], dealer: this._dealers.find(dealer => dealer.id === this._listings[idx].dealerId) } };
     },
 
@@ -1037,7 +1066,10 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       const idx = this._listings.findIndex(l => l.id === id);
       if (idx === -1) return { success: false, error: 'Vehicle listing not found.' };
 
-      this._listings[idx].availability = availability;
+      const listing = this._listings[idx];
+      if (!this.dealerCanTrade(listing.dealerId)) return { success: false, error: 'Only approved dealers can update inventory.' };
+      this.audit.record('Listing updated', listing.dealerId, id, `Availability changed to ${availability.replace(/_/g, ' ')}`);
+      listing.availability = availability;
       if (availability === 'out_of_stock') {
         this._listings[idx].quantity = 0;
       }
@@ -1046,10 +1078,20 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       return { success: true, data: { ...this._listings[idx], dealer: this._dealers.find(dealer => dealer.id === this._listings[idx].dealerId) } };
     },
 
-    delete: async (id: string) => {
+    delete: async (id: string, actorId?: string, reason?: string) => {
       const idx = this._listings.findIndex(l => l.id === id);
       if (idx === -1) return { success: false, error: 'Vehicle listing not found.' };
+      const current = this._listings[idx];
+      if (actorId ? !this.canAdmin(actorId) : !this.dealerCanTrade(current.dealerId)) {
+        return { success: false, error: 'Listing removal is unavailable for this account.' };
+      }
+      if (actorId && !reason?.trim()) return { success: false, error: 'Provide a reason for removing the listing.' };
       const [listing] = this._listings.splice(idx, 1);
+      for (const offer of this._offers) {
+        if (offer.listingId === id && offer.status === 'pending') offer.status = 'expired';
+      }
+      this.audit.record('Listing removed', actorId || listing.dealerId, id,
+        `${listing.brand} ${listing.model} ${listing.variant}${reason?.trim() ? ` · ${reason.trim()}` : ''}`);
       this.archivedPriceChanges.push(...pricingService.listingChanges({
         ...listing, dealer: this._dealers.find(dealer => dealer.id === listing.dealerId),
       }));
@@ -1071,21 +1113,34 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     update: async (id: string, data: Record<string, unknown>) => {
       const idx = this._dealers.findIndex(d => d.id === id);
       if (idx === -1) return { success: false, error: 'Dealership not found.' };
-      this._dealers[idx] = { ...this._dealers[idx], ...data } as Dealer;
+      const current = this._dealers[idx];
+      this._dealers[idx] = { ...current, ...data, id: current.id, userId: current.userId,
+        status: current.status, isVerified: current.isVerified } as Dealer;
       return { success: true, data: this._dealers[idx] };
     },
 
-    updateStatus: async (id: string, status: Dealer['status']) => {
+    updateStatus: async (id: string, status: Dealer['status'], actorId?: string) => {
+      if (!actorId || !this.canAdmin(actorId)) return { success: false, error: 'Administrator access is required.' };
+      if (!['approved', 'rejected', 'suspended'].includes(status)) return { success: false, error: 'Invalid dealer status.' };
       const idx = this._dealers.findIndex(d => d.id === id);
       if (idx === -1) return { success: false, error: 'Dealership not found.' };
+      const dealer = this._dealers[idx];
+      if (dealer.status === status) return { success: true, data: dealer };
+      this.audit.record('Dealer status changed', actorId, id, `${dealer.dealershipName} · ${dealer.status} → ${status}`);
       this._dealers[idx].status = status;
       this._dealers[idx].isVerified = status === 'approved';
       return { success: true, data: this._dealers[idx] };
     },
   };
 
+  private queueVehicle(entry: QueueEntry) {
+    const vehicleModel = this._vehicleModels.find(model => model.id === entry.vehicleModelId);
+    return { vehicleModel, variant: vehicleModel?.variants.find(variant => variant.id === entry.variantId) };
+  }
+
   queue = {
     join: async (data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string }) => {
+      if (this.customerSuspended(data.customerId)) return { success: false, error: 'This customer account is suspended.' };
       const position = this._queues.filter(
         q => q.vehicleModelId === data.vehicleModelId && q.variantId === (data.variantId || '') &&
         q.city?.trim().toLowerCase() === data.city?.trim().toLowerCase() &&
@@ -1117,6 +1172,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     leave: async (queueId: string) => {
       const idx = this._queues.findIndex(q => q.id === queueId);
       if (idx === -1) return { success: false, error: 'Queue entry not found.' };
+      if (this.customerSuspended(this._queues[idx].customerId)) return { success: false, error: 'This customer account is suspended.' };
       this._queues[idx].status = 'cancelled';
       return { success: true, data: { id: queueId } };
     },
@@ -1126,7 +1182,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
         .filter(q => q.customerId === customerId)
         .map(q => ({
           ...q,
-          vehicleModel: this._vehicleModels.find(m => m.id === q.vehicleModelId),
+          ...this.queueVehicle(q),
         }));
       return { success: true, data: userQueues };
     },
@@ -1134,7 +1190,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     getAll: async () => {
       const allQueues = this._queues.map(q => ({
         ...q,
-        vehicleModel: this._vehicleModels.find(m => m.id === q.vehicleModelId),
+        ...this.queueVehicle(q),
       }));
       return { success: true, data: allQueues };
     },
@@ -1146,6 +1202,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       if (!offer?.listingId || offer.status !== 'pending' || !(Date.parse(offer.expiryDate) > Date.now())) {
         return { success: false, error: 'This offer is no longer available.' };
       }
+      if (this.customerSuspended(offer.customerId)) return { success: false, error: 'This customer account is suspended.' };
       if (![24, 48, 72, 168].includes(lockDurationHours)) {
         return { success: false, error: 'Select a supported price lock duration.' };
       }
@@ -1169,6 +1226,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
         bookingDate: new Date(now + 2 * 86_400_000).toISOString(),
       };
       this._bookings.unshift(booking);
+      this.audit.record('Booking accepted', offer.customerId, booking.id, `Accepted offer ${offer.id} · ${offer.vehicleName}`);
       offer.status = 'accepted';
       const queue = this._queues.find(item => item.id === offer.queueEntryId);
       if (queue && (queue.status === 'waiting' || queue.status === 'offered')) queue.status = 'booked';
@@ -1194,6 +1252,8 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     },
 
     create: async (data: Omit<Offer, 'id' | 'createdAt'>) => {
+      if (!this.dealerCanTrade(data.dealerId)) return { success: false, error: 'Only approved dealers can send offers.' };
+      if (this.customerSuspended(data.customerId)) return { success: false, error: 'This customer account is suspended.' };
       const listing = this._listings.find(item => item.id === data.listingId && item.dealerId === data.dealerId);
       if (!listing || !pricingService.isValid(data.offeredPrice)) {
         return { success: false, error: 'Select a dealer listing and enter a valid offer price.' };
@@ -1205,6 +1265,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
         createdAt: new Date().toISOString(),
       };
       this._offers.push(newOffer);
+      this.audit.record('Offer created', newOffer.dealerId, newOffer.id, `${newOffer.vehicleName} · ${newOffer.customerId}`);
       return { success: true, data: newOffer };
     },
 
@@ -1230,6 +1291,8 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     },
 
     create: async (data: { customerId: string; listingId: string; dealerId: string; notes?: string; lockedPrice?: number; bookingDate?: string }) => {
+      if (this.customerSuspended(data.customerId)) return { success: false, error: 'This customer account is suspended.' };
+      if (!this.dealerCanTrade(data.dealerId)) return { success: false, error: 'This dealer is unavailable for new bookings.' };
       const listing = this._listings.find(item => item.id === data.listingId && item.dealerId === data.dealerId);
       if (!listing) return { success: false, error: 'Vehicle listing not found.' };
       const lockedPrice = pricingService.current(listing);
@@ -1287,31 +1350,33 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     updateStatus: async (id: string, status: Booking['status']) => {
       const booking = this._bookings.find(b => b.id === id);
       if (!booking) return { success: false, error: 'Booking not found.' };
+      if (booking.status !== status && status === 'confirmed') {
+        this.audit.record('Booking accepted', booking.dealerId, booking.id, `Dealer confirmed ${booking.vehicleName || booking.listingId}`);
+      }
       booking.status = status;
+      booking.updatedAt = new Date().toISOString();
       return { success: true, data: booking };
     },
   };
 
   admin = {
-    getStats: async (): Promise<ApiResponse<AdminStats>> => {
-      const totalCustomers = this._users.filter(u => u.role === 'customer').length;
-      const totalDealers = this._dealers.length;
-      const totalVehicles = this._listings.length;
-      const activeQueues = this._queues.filter(q => q.status === 'waiting' || q.status === 'offered').length;
-      const totalBookings = this._bookings.length;
-      const pendingApprovals = this._dealers.filter(d => d.status === 'pending').length;
-
-      return {
-        success: true,
-        data: {
-          totalCustomers,
-          totalDealers,
-          totalVehicles,
-          activeQueues,
-          totalBookings,
-          pendingApprovals,
-        },
-      };
+    getStats: async (): Promise<ApiResponse<AdminStats>> => ({
+      success: true,
+      data: adminMetrics({ users: this._users, dealers: this._dealers, vehicles: this._listings,
+        queues: this._queues, offers: this._offers, bookings: this._bookings }),
+    }),
+    getAuditLog: async () => ({ success: true, data: this.audit.list() }),
+    updateCustomerStatus: async (id: string, status: 'active' | 'suspended', actorId: string) => {
+      if (!this.canAdmin(actorId)) return { success: false, error: 'Administrator access is required.' };
+      if (status !== 'active' && status !== 'suspended') return { success: false, error: 'Invalid customer status.' };
+      const customer = this._users.find(user => user.id === id && user.role === 'customer');
+      if (!customer) return { success: false, error: 'Customer not found.' };
+      const previous = customer.status ?? 'active';
+      if (previous !== status) {
+        customer.status = status;
+        this.audit.record('Customer account status changed', actorId, id, `${customer.name} · ${previous} → ${status}`);
+      }
+      return { success: true, data: { ...customer } };
     },
   };
 }

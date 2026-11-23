@@ -1,3 +1,6 @@
+import { mockDealerCanTrade } from './dealerService';
+import { mockAudit } from './mockAudit';
+import { isMockCustomerSuspended } from './authService';
 import { pricingService } from '../../../src/services/pricingService';
 import { vehicleService } from './vehicleService';
 import { demandFixtures } from '../../../src/data/demandFixtures';
@@ -163,6 +166,8 @@ export const bookingService = {
     if (api?.bookings?.create) {
       return api.bookings.create(data) as Promise<ApiResponse<Booking>>;
     }
+    if (isMockCustomerSuspended(data.customerId)) return { success: false, error: 'This customer account is suspended.' };
+    if (!mockDealerCanTrade(data.dealerId)) return { success: false, error: 'This dealer is unavailable for new bookings.' };
     const { data: listing } = await vehicleService.getById(data.listingId);
     if (!listing || listing.dealerId !== data.dealerId) return { success: false, error: 'Vehicle listing not found.' };
     const lockHours = data.lockDurationHours || 72;
@@ -273,6 +278,9 @@ export const bookingService = {
     const booking = mockBookings.find(b => b.id === id);
     if (!booking) return { success: false, error: 'Booking not found' };
 
+    if (booking.status !== status && status === 'confirmed') {
+      mockAudit.record('Booking accepted', booking.dealerId, id, `Dealer confirmed ${booking.vehicleName || booking.listingId}`);
+    }
     booking.status = status;
     booking.updatedAt = new Date().toISOString();
 

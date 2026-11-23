@@ -14,7 +14,10 @@
     "start": "electron .",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
-    "dist:win": "npm run build && electron-builder --win"
+    "dist:win": "npm run build && electron-builder --win",
+    "db:migrate": "npm run build:electron && node dist-electron/src/database/migrate.js",
+    "db:verify": "npm run build:electron && node scripts/verify-postgres.cjs",
+    "db:create-admin": "npm run build:electron && node dist-electron/src/database/bootstrapAdmin.js"
   },
   "build": {
     "appId": "com.bestbuy.marketplace",
@@ -60,10 +63,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "@types/pg": "^8.23.1",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^28.3.3",

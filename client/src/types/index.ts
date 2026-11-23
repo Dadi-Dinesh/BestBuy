@@ -8,12 +8,14 @@ export interface User {
   email: string;
   phoneNumber?: string;
   role: UserRole;
+  status?: CustomerAccountStatus;
   createdAt: string;
   avatarUrl?: string;
   dealerProfile?: Dealer;
 }
 
-export type DealerVerificationStatus = 'pending' | 'approved' | 'rejected';
+export type CustomerAccountStatus = 'active' | 'suspended';
+export type DealerVerificationStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 
 export interface Dealer {
   id: string;
