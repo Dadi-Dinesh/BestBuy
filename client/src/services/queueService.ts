@@ -1,5 +1,6 @@
+import { indiaDemo } from '../../../src/data/indiaDemo';
+import { queueAllocation } from '../../../src/services/queueAllocation';
 import { isMockCustomerSuspended } from './authService';
-import { demandFixtures } from '../../../src/data/demandFixtures';
 import { ApiResponse, QueueEntry } from '../types';
 
 function getAPI() {
@@ -9,69 +10,7 @@ function getAPI() {
   return null;
 }
 
-const mockQueues: QueueEntry[] = [
-  ...demandFixtures().queues,
-  {
-    id: 'q1',
-    city: 'Los Angeles',
-    vehicleModelId: 'vm1',
-    variantId: 'vv2',
-    customerId: 'u1',
-    customerName: 'Alice Johnson',
-    customerPhone: '+1 (555) 234-5678',
-    position: 2,
-    status: 'waiting',
-    createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
-    vehicleModel: {
-      id: 'vm1',
-      make: 'Toyota',
-      model: 'Camry',
-      year: 2024,
-      category: 'Sedan',
-      variants: [],
-    },
-    variant: {
-      id: 'vv2',
-      name: 'XSE Hybrid',
-      trimLevel: 'Sport Premium',
-      engineType: '2.5L Hybrid',
-      transmission: 'eCVT',
-      fuelType: 'Hybrid',
-      seatingCapacity: 5,
-      features: ['JBL Audio', 'Panoramic Roof'],
-    },
-  },
-  {
-    id: 'q2',
-    city: 'San Francisco',
-    vehicleModelId: 'vm4',
-    variantId: 'vv5',
-    customerId: 'u1',
-    customerName: 'Alice Johnson',
-    customerPhone: '+1 (555) 234-5678',
-    position: 1,
-    status: 'offered',
-    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-    vehicleModel: {
-      id: 'vm4',
-      make: 'Tesla',
-      model: 'Model Y',
-      year: 2024,
-      category: 'Electric SUV',
-      variants: [],
-    },
-    variant: {
-      id: 'vv5',
-      name: 'Long Range AWD',
-      trimLevel: 'Long Range',
-      engineType: 'Dual Motor',
-      transmission: 'Single-Speed',
-      fuelType: 'Electric',
-      seatingCapacity: 5,
-      features: ['Autopilot', 'All-Glass Roof'],
-    },
-  },
-];
+const mockQueues = indiaDemo().queues;
 
 export const queueService = {
   markBooked(id: string) {
@@ -84,17 +23,15 @@ export const queueService = {
       return api.queue.join(data) as Promise<ApiResponse<QueueEntry>>;
     }
     if (isMockCustomerSuspended(data.customerId)) return { success: false, error: 'This customer account is suspended.' };
+    const { existing,position } = queueAllocation(mockQueues,data);
+    if (existing) return { success:true,data:existing };
     const newEntry: QueueEntry = {
-      id: `q${Date.now()}`,
+      id: crypto.randomUUID(),
       vehicleModelId: data.vehicleModelId,
       variantId: data.variantId || '',
       city: data.city,
       customerId: data.customerId,
-      position: mockQueues.filter(queue =>
-        queue.vehicleModelId === data.vehicleModelId && queue.variantId === (data.variantId || '') &&
-        queue.city?.trim().toLowerCase() === data.city?.trim().toLowerCase() &&
-        (queue.status === 'waiting' || queue.status === 'offered')
-      ).length + 1,
+      position,
       status: 'waiting',
       createdAt: new Date().toISOString(),
     };
@@ -108,7 +45,7 @@ export const queueService = {
       return api.queue.getPosition(queueId) as Promise<ApiResponse<{ position: number }>>;
     }
     const entry = mockQueues.find(q => q.id === queueId);
-    return { success: true, data: { position: entry ? entry.position : 1 } };
+    return entry ? { success: true, data: { position:entry.position } } : { success:false,error:'Queue entry not found.' };
   },
 
   async leave(queueId: string): Promise<ApiResponse<{ id: string }>> {
@@ -119,6 +56,7 @@ export const queueService = {
     const idx = mockQueues.findIndex(q => q.id === queueId);
     if (idx === -1) return { success: false, error: 'Queue entry not found.' };
     if (isMockCustomerSuspended(mockQueues[idx].customerId)) return { success: false, error: 'This customer account is suspended.' };
+    if (!['waiting','offered'].includes(mockQueues[idx].status)) return { success:false,error:'This queue entry is no longer active.' };
     mockQueues[idx].status = 'cancelled';
     return { success: true, data: { id: queueId } };
   },

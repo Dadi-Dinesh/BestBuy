@@ -1,3 +1,7 @@
+import { useGarage } from '../../store/garageStore';
+import { useIndiaCatalogue } from '../india/IndiaCatalogue';
+import { VehicleImage } from '../../components/ui/VehicleImage';
+import { Modal } from '../../components/ui/Modal';
 import { ListingPriceChange } from '../../components/demand/ListingPriceChange';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -48,6 +52,8 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
 
   const activeListingId = propListingId || routeId;
 
+  const {cars}=useIndiaCatalogue();
+  const garage=useGarage();
   const [listing, setListing] = useState<VehicleListing | null>(null);
   const [allListings, setAllListings] = useState<VehicleListing[]>([]);
   const [matchingDealers, setMatchingDealers] = useState<VehicleListing[]>([]);
@@ -97,6 +103,9 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
           setListing(null);
           setMatchingDealers([]);
         }
+      } catch {
+        setListing(null);
+        setMatchingDealers([]);
       } finally {
         setIsLoading(false);
       }
@@ -171,7 +180,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
   if (isLoading) {
     return (
       <div className="py-20 flex flex-col items-center justify-center">
-        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
+        <div className="w-10 h-10 border-4 border-slate-600 border-t-transparent rounded-full animate-spin mb-4" />
         <p className="text-sm font-medium text-slate-600">Loading vehicle specifications and dealer offers...</p>
       </div>
     );
@@ -192,6 +201,10 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
     );
   }
 
+  const reference = cars.find(car=>car.manufacturer.toLowerCase()===listing.brand.toLowerCase() &&
+    car.model.toLowerCase()===listing.model.toLowerCase());
+  const favouriteId=reference?.id || `listing:${listing.id}`;
+  const favourite=!!user && garage.favourites[user.id]?.includes(favouriteId);
   const lowestPrice = Math.min(...matchingDealers.map(d => d.dealerOfferPrice));
   const highestPrice = Math.max(...matchingDealers.map(d => d.dealerOfferPrice));
   const avgPrice = Math.round(
@@ -208,7 +221,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <button
             onClick={handleBack}
-            className="text-slate-600 hover:text-blue-600 font-medium flex items-center gap-1 transition-colors"
+            className="text-slate-600 hover:text-slate-600 font-medium flex items-center gap-1 transition-colors"
           >
             <ArrowLeft size={14} /> Back to Search
           </button>
@@ -220,9 +233,9 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
           <span className="font-semibold text-slate-800">{listing.variant}</span>
         </div>
 
-        {bookingError && <p role="alert" className="text-sm text-red-700">{bookingError}</p>}
+        {bookingError && <p role="alert" className="text-sm text-slate-700">{bookingError}</p>}
         {actionSuccess && (
-          <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-lg flex items-center gap-2">
+          <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-lg flex items-center gap-2">
             <CheckCircle2 size={14} />
             <span>{actionSuccess}</span>
           </div>
@@ -234,7 +247,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
         {/* Left Column: Image Gallery (7 cols) */}
         <div className="lg:col-span-7 space-y-3">
           <div className="relative aspect-[16/10] bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
-            <img
+            <VehicleImage
               src={images[selectedImageIndex] || images[0]}
               alt={`${listing.brand} ${listing.model}`}
               className="w-full h-full object-cover"
@@ -256,10 +269,10 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                   key={idx}
                   onClick={() => setSelectedImageIndex(idx)}
                   className={`w-20 h-14 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${
-                    selectedImageIndex === idx ? 'border-blue-600 ring-2 ring-blue-100' : 'border-slate-200 opacity-70 hover:opacity-100'
+                    selectedImageIndex === idx ? 'border-slate-600 ring-2 ring-slate-100' : 'border-slate-200 opacity-70 hover:opacity-100'
                   }`}
                 >
-                  <img src={img} alt="thumbnail" className="w-full h-full object-cover" />
+                  <VehicleImage src={img} alt="thumbnail" className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
@@ -307,7 +320,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
               {listing.description || 'Precision-engineered vehicle backed by manufacturer warranty and verified multi-point inspection.'}
             </p>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>Odometer Mileage: <strong className="text-slate-800">{listing.mileage} miles</strong></span>
+              <span>Odometer: <strong className="text-slate-800">{listing.mileage.toLocaleString('en-IN')} km</strong></span>
               <span>Condition: <strong className="text-slate-800 capitalize">{listing.condition}</strong></span>
               <span>Stock Quantity: <strong className="text-slate-800">{listing.quantity} units</strong></span>
             </div>
@@ -318,7 +331,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
         <div className="lg:col-span-5 space-y-4">
           <Card padding="lg" className="border-slate-200 shadow-sm">
             <div>
-              <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
+              <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                 {listing.brand}
               </span>
               <h1 className="text-2xl font-black text-slate-900 mt-0.5">
@@ -342,12 +355,12 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
                     Dealer Offer Price
                   </span>
-                  <span className="text-2xl font-extrabold text-blue-600">
+                  <span className="text-2xl font-extrabold text-slate-600">
                     {formatCurrency(listing.dealerOfferPrice)}
                   </span>
                 </div>
                 {listing.dealerOfferPrice < listing.onRoadPrice && (
-                  <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                  <span className="text-xs font-semibold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-100">
                     Save {formatCurrency(listing.onRoadPrice - listing.dealerOfferPrice)}
                   </span>
                 )}
@@ -356,14 +369,14 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
             </div>
 
             {/* Showing selected dealer info */}
-            <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-100 text-xs space-y-1.5 mb-5">
+            <div className="p-3.5 bg-slate-50/60 rounded-xl border border-slate-100 text-xs space-y-1.5 mb-5">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-900 flex items-center gap-1.5">
-                  <Building2 size={14} className="text-blue-600" />
+                  <Building2 size={14} className="text-slate-600" />
                   {listing.dealer?.dealershipName}
                 </span>
                 {listing.dealer?.isVerified && (
-                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="text-[10px] font-semibold text-slate-700 bg-slate-100/70 px-2 py-0.5 rounded-full flex items-center gap-1">
                     <ShieldCheck size={11} /> Verified Dealer
                   </span>
                 )}
@@ -374,7 +387,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
               </p>
               <p className="text-slate-600 flex items-center gap-1.5">
                 <Phone size={12} className="text-slate-400" />
-                Showroom Phone: <a href={`tel:${listing.dealer?.phone}`} className="text-blue-600 font-medium hover:underline">{listing.dealer?.phone}</a>
+                Showroom Phone: <a href={`tel:${listing.dealer?.phone}`} className="text-slate-600 font-medium hover:underline">{listing.dealer?.phone}</a>
               </p>
             </div>
 
@@ -394,10 +407,14 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                 className="w-full"
                 size="md"
                 onClick={() => setShowQueueModal(true)}
-                leftIcon={<Sparkles size={16} className="text-amber-500" />}
+                leftIcon={<Sparkles size={16} className="text-slate-500" />}
               >
                 Join Shared Queue
               </Button>
+              <Link className="btn-primary" to={`/test-drives?listing=${listing.id}`}>Book Test Drive</Link>
+              {user&&<button className="btn-secondary" type="button" aria-pressed={!!favourite}
+                onClick={()=>garage.toggle(user.id,favouriteId)}>{favourite?'Remove favourite':'Add to favourites'}</button>}
+              <Link className="btn-secondary" to="/compare">Compare dealer prices</Link>
             </div>
 
             <p className="text-[11px] text-slate-400 text-center mt-3">
@@ -408,13 +425,13 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
           {/* Model Market Stats Summary Card */}
           <Card padding="md" className="border-slate-200">
             <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5 mb-3">
-              <TrendingDown size={14} className="text-blue-600" />
+              <TrendingDown size={14} className="text-slate-600" />
               Multi-Dealer Market Snapshot
             </h4>
             <div className="grid grid-cols-3 gap-2 text-center text-xs">
               <div className="p-2.5 bg-slate-50 rounded-lg">
                 <span className="text-[10px] text-slate-400 block font-semibold">Lowest Price</span>
-                <span className="font-bold text-emerald-600 mt-0.5 block">{formatCurrency(lowestPrice)}</span>
+                <span className="font-bold text-slate-600 mt-0.5 block">{formatCurrency(lowestPrice)}</span>
               </div>
               <div className="p-2.5 bg-slate-50 rounded-lg">
                 <span className="text-[10px] text-slate-400 block font-semibold">Average Price</span>
@@ -422,7 +439,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
               </div>
               <div className="p-2.5 bg-slate-50 rounded-lg">
                 <span className="text-[10px] text-slate-400 block font-semibold">Dealers</span>
-                <span className="font-bold text-blue-600 mt-0.5 block">{matchingDealers.length} Available</span>
+                <span className="font-bold text-slate-600 mt-0.5 block">{matchingDealers.length} Available</span>
               </div>
             </div>
           </Card>
@@ -448,7 +465,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
 
           <div className="flex items-center gap-2 text-xs">
             <span className="font-medium text-slate-500">Best Deal:</span>
-            <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200">
+            <span className="font-bold text-slate-600 bg-slate-50 px-2 py-1 rounded-md border border-slate-200">
               {formatCurrency(lowestPrice)}
             </span>
           </div>
@@ -475,7 +492,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                   <tr
                     key={dealerListing.id}
                     className={`transition-colors ${
-                      isCurrent ? 'bg-blue-50/40' : 'hover:bg-slate-50/80'
+                      isCurrent ? 'bg-slate-50/40' : 'hover:bg-slate-50/80'
                     }`}
                   >
                     {/* Dealer info */}
@@ -488,7 +505,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                           <p className="font-bold text-slate-900 flex items-center gap-2">
                             {dealerListing.dealer?.dealershipName || 'Verified Dealership'}
                             {isCurrent && (
-                              <span className="text-[10px] font-medium bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded">
+                              <span className="text-[10px] font-medium bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded">
                                 Current
                               </span>
                             )}
@@ -507,11 +524,11 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                     {/* Verification */}
                     <td className="px-6 py-4">
                       {dealerListing.dealer?.isVerified ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-full">
                           <ShieldCheck size={12} /> Verified
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full">
                           <Clock size={12} /> Pending
                         </span>
                       )}
@@ -525,7 +542,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                         </p>
                         <ListingPriceChange listing={dealerListing} />
                         {isLowest ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600">
                             <Award size={12} /> Cheapest Offer
                           </span>
                         ) : (
@@ -591,11 +608,10 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
 
       {/* MODAL 1: JOIN WAITLIST QUEUE */}
       {showQueueModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">
+        <Modal label="Join shared queue" close={() => setShowQueueModal(false)}>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <Sparkles size={18} className="text-blue-600" />
+                <Sparkles size={18} className="text-slate-600" />
                 <h3 className="text-base font-bold text-slate-900">Join Shared Vehicle Queue</h3>
               </div>
               <button
@@ -644,14 +660,12 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                 Confirm & Join Queue
               </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* MODAL 2: BOOK VISIT / TEST DRIVE */}
       {bookingDealerListing && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 space-y-4">
+        <Modal label="Schedule showroom visit" close={() => !isSubmittingBooking && setBookingDealerListing(null)} wide>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
@@ -670,15 +684,15 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
             </div>
 
             <form onSubmit={handleCreateBooking} className="space-y-4">
-              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-xs space-y-1">
+              <div className="p-3 bg-slate-50/70 border border-slate-100 rounded-xl text-xs space-y-1">
                 <p className="font-bold text-slate-800 flex items-center gap-1.5">
-                  <Building2 size={13} className="text-blue-600" />
+                  <Building2 size={13} className="text-slate-600" />
                   {bookingDealerListing.dealer?.dealershipName}
                 </p>
                 <p className="text-slate-600">
                   Showroom: {bookingDealerListing.dealer?.address}, {bookingDealerListing.dealer?.city} ({bookingDealerListing.dealer?.pinCode})
                 </p>
-                <p className="text-blue-700 font-semibold pt-1">
+                <p className="text-slate-700 font-semibold pt-1">
                   Agreed Dealer Offer: {formatCurrency(bookingDealerListing.dealerOfferPrice)}
                 </p>
               </div>
@@ -700,7 +714,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                   value={bookingNotes}
                   onChange={e => setBookingNotes(e.target.value)}
                   placeholder="E.g., Test drive requested on highway, price negotiation, financing review..."
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 text-slate-800"
                 />
               </div>
 
@@ -724,8 +738,7 @@ export const VehicleDetailsPage: React.FC<VehicleDetailsPageProps> = ({
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

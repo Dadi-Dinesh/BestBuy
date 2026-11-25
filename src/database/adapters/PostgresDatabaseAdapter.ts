@@ -1,3 +1,6 @@
+import { redeemRecovery } from '../passwordRecovery';
+import { postgresIndiaStore } from '../indiaStores';
+import { canChangeBooking } from '../../services/bookingTransitions';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { ZodError } from 'zod';
@@ -46,6 +49,10 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
   async connect() {
     await this.pool.query('SELECT id FROM bestbuy.users LIMIT 0');
   }
+
+  resetPassword(token:unknown,password:unknown) { return redeemRecovery(this.pool,token,password); }
+
+  indiaStore() { return postgresIndiaStore(this.pool); }
 
   async disconnect() { await this.pool.end(); }
 
@@ -98,7 +105,7 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
       `SELECT jsonb_build_object('dealerId',i.dealer_id,'userId',d.user_id,'price',i.dealer_price,
         'exShowroom',i.ex_showroom,'onRoad',i.on_road,'cityId',l.city_id,'variantId',i.variant_id) AS data
       FROM bestbuy.inventory i JOIN bestbuy.dealers d ON d.id=i.dealer_id JOIN bestbuy.dealer_locations l ON l.id=i.location_id
-      WHERE i.id=$1 AND i.deleted_at IS NULL AND (NOT $2::boolean OR d.status='approved') FOR UPDATE OF i FOR SHARE OF d`, [validate.id.parse(id),approved]);
+      WHERE i.id=$1 AND i.deleted_at IS NULL AND i.currency='INR' AND (NOT $2::boolean OR d.status='approved') FOR UPDATE OF i FOR SHARE OF d`, [validate.id.parse(id),approved]);
   }
 
   auth: IDatabaseAdapter['auth'] = {
@@ -112,6 +119,7 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
     }),
     register: input => this.respond(async () => {
       const data = validate.signup.parse(input);
+      if (data.role === 'dealer' && !validate.isIndianLocation(data)) return reject('Select a listed Indian state and city.');
       const passwordHash = await hashPassword(data.password);
       return this.transaction(async db => {
         const id = await one<string>(db, 'INSERT INTO bestbuy.users(email,password_hash,name,phone,role) VALUES ($1,$2,$3,$4,$5) RETURNING id AS data',
@@ -140,6 +148,7 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
       await one(db,'SELECT id AS data FROM bestbuy.dealers WHERE id=$1 FOR UPDATE',[key]);
       const current = await one<Dealer>(db,`SELECT data FROM (${dealerView}) d WHERE id=$1`,[key]);
       const details = validate.location.parse({ ...current,...input });
+      if (!validate.isIndianLocation(details)) return reject('Select a listed Indian state and city.');
       const dealer = validate.signup.options[1].pick({ dealershipName:true,contactPerson:true,dealershipPhone:true,email:true }).parse({
         ...current,...input,dealershipPhone:input.phone ?? current.phone,
       });
@@ -185,15 +194,15 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
     getPriceChanges: () => this.respond(() => rows(this.pool,`SELECT jsonb_build_object('listingId',p.listing_id,
       'previousPrice',p.previous_price,'newPrice',p.new_price,'changedAt',p.changed_at,
       'dealerName',i.data->'dealer'->>'dealershipName','vehicleName',concat_ws(' ',i.brand,i.model,i.variant)) AS data
-      FROM bestbuy.price_changes p JOIN (${listingView}) i ON i.id=p.listing_id ORDER BY p.id DESC`)),
+      FROM bestbuy.price_changes p JOIN (${listingView}) i ON i.id=p.listing_id WHERE i.currency='INR' ORDER BY p.id DESC`)),
     getAll: filters => this.respond(() => rows<VehicleListing>(this.pool,`SELECT data FROM (${listingView}) v
-      WHERE deleted_at IS NULL AND (NOT $1::boolean OR dealer_status='approved')
+      WHERE deleted_at IS NULL AND currency='INR' AND (NOT $1::boolean OR dealer_status='approved')
       AND ($2::uuid IS NULL OR dealer_id=$2) AND ($3::text IS NULL OR availability=$3)
       AND ($4::text IS NULL OR lower(brand)=lower($4)) AND ($5::text IS NULL OR lower(model)=lower($5))
       AND ($6::text IS NULL OR lower(variant)=lower($6)) ORDER BY data->>'createdAt' DESC`,
       [filters?.marketplace === true,filters?.dealerId == null ? null : validate.id.parse(filters.dealerId),
         filters?.availability ?? null,filters?.brand ?? null,filters?.model ?? null,filters?.variant ?? null])),
-    getById: id => this.respond(() => one<VehicleListing>(this.pool,`SELECT data FROM (${listingView}) v WHERE id=$1 AND deleted_at IS NULL`,[validate.id.parse(id)])),
+    getById: id => this.respond(() => one<VehicleListing>(this.pool,`SELECT data FROM (${listingView}) v WHERE id=$1 AND deleted_at IS NULL AND currency='INR'`,[validate.id.parse(id)])),
     create: input => this.respond(() => this.transaction(async db => {
       const { dealerId,brand,model,variant,dealerOfferPrice,exShowroomPrice,onRoadPrice,quantity,availability,...details } = validate.listing.parse(input);
       const dealer = await one<{ locationId:string; actorId:string }>(db,`SELECT jsonb_build_object('locationId',l.id,'actorId',d.user_id) AS data
@@ -249,7 +258,7 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
       const cities = await rows<string>(db,`SELECT DISTINCT l.city_id AS data FROM bestbuy.inventory i
         JOIN bestbuy.dealer_locations l ON l.id=i.location_id JOIN bestbuy.cities c ON c.id=l.city_id
         JOIN bestbuy.vehicle_variants t ON t.id=i.variant_id JOIN bestbuy.dealers d ON d.id=i.dealer_id
-        WHERE i.variant_id=$1 AND t.vehicle_id=$2 AND lower(regexp_replace(trim(c.name), '[[:space:]]+', ' ', 'g'))=lower(regexp_replace(trim($3), '[[:space:]]+', ' ', 'g'))
+        WHERE i.currency='INR' AND i.variant_id=$1 AND t.vehicle_id=$2 AND lower(regexp_replace(trim(c.name), '[[:space:]]+', ' ', 'g'))=lower(regexp_replace(trim($3), '[[:space:]]+', ' ', 'g'))
         AND ($4::text IS NULL OR lower(c.state)=lower($4)) AND i.deleted_at IS NULL AND d.status='approved'`,
         [data.variantId,data.vehicleModelId,data.city,data.state ?? null]);
       if (cities.length !== 1) return reject('Select an available city for this vehicle.');
@@ -302,12 +311,12 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
       await db.query("UPDATE bestbuy.queue_entries SET status='offered' WHERE id=$1",[data.queueEntryId]);
       await audit(db,'Offer created',listing.userId,id,details.vehicleName);
       await notify(db,data.customerId,'New dealer offer',`You received an offer for the ${details.vehicleName}.`,'offer');
-      return one<Offer>(db,`SELECT data FROM (${offerView}) o WHERE id=$1`,[id]);
+      return one<Offer>(db,`SELECT data FROM (${offerView}) o WHERE currency='INR' AND id=$1`,[id]);
     })),
     accept: (id,hours) => this.respond(() => this.transaction(async db => {
       const key = validate.id.parse(id);
       const lockHours = validate.locks.parse(hours);
-      const offer = await one<Offer>(db,`SELECT data FROM (${offerView}) o WHERE id=$1`,[key]);
+      const offer = await one<Offer>(db,`SELECT data FROM (${offerView}) o WHERE currency='INR' AND id=$1`,[key]);
       await this.requireCustomer(db,offer.customerId);
       if (offer.queueEntryId && !active.has((await this.queueForUpdate(db,offer.queueEntryId)).status)) return reject('The queue entry is no longer active.');
       await one(db,`UPDATE bestbuy.offers SET status='accepted' WHERE id=$1 AND status='pending'
@@ -327,17 +336,21 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
     updateStatus: (id,status) => this.respond(() => this.transaction(async db => {
       if (status !== 'declined' && status !== 'expired') return reject('Invalid offer transition.');
       const key = validate.id.parse(id);
-      const offer = await one<Offer>(db,`SELECT data FROM (${offerView}) o WHERE id=$1`,[key]);
+      const offer = await one<Offer>(db,`SELECT data FROM (${offerView}) o WHERE currency='INR' AND id=$1`,[key]);
       if (offer.queueEntryId) await this.queueForUpdate(db,offer.queueEntryId);
       await one(db,`UPDATE bestbuy.offers SET status=$2 WHERE id=$1 AND status='pending'
         AND expires_at>clock_timestamp() RETURNING id AS data`,[key,status]);
       if (offer.queueEntryId) await db.query(`UPDATE bestbuy.queue_entries SET status='waiting' WHERE id=$1 AND status='offered'
         AND NOT EXISTS (SELECT 1 FROM bestbuy.offers WHERE queue_entry_id=$1 AND status='pending' AND expires_at>now())`,[offer.queueEntryId]);
+      if (status === 'declined') {
+        const dealer = await one<string>(db,'SELECT user_id AS data FROM bestbuy.dealers WHERE id=$1',[offer.dealerId]);
+        await notify(db,dealer,'Offer declined',`Your offer for ${offer.vehicleName} was declined.`,'offer');
+      }
       return { ...offer,status };
     })),
-    getAll: () => this.respond(() => rows<Offer>(this.pool,`SELECT data FROM (${offerView}) o ORDER BY data->>'createdAt' DESC`)),
-    getByCustomerId: id => this.respond(() => rows<Offer>(this.pool,`SELECT data FROM (${offerView}) o WHERE customer_id=$1 ORDER BY data->>'createdAt' DESC`,[validate.id.parse(id)])),
-    getByDealerId: id => this.respond(() => rows<Offer>(this.pool,`SELECT data FROM (${offerView}) o WHERE dealer_id=$1 ORDER BY data->>'createdAt' DESC`,[validate.id.parse(id)])),
+    getAll: () => this.respond(() => rows<Offer>(this.pool,`SELECT data FROM (${offerView}) o WHERE currency='INR' ORDER BY data->>'createdAt' DESC`)),
+    getByCustomerId: id => this.respond(() => rows<Offer>(this.pool,`SELECT data FROM (${offerView}) o WHERE currency='INR' AND customer_id=$1 ORDER BY data->>'createdAt' DESC`,[validate.id.parse(id)])),
+    getByDealerId: id => this.respond(() => rows<Offer>(this.pool,`SELECT data FROM (${offerView}) o WHERE currency='INR' AND dealer_id=$1 ORDER BY data->>'createdAt' DESC`,[validate.id.parse(id)])),
   };
 
   private async insertBooking(db: Connection,customerId: string,dealerId: string,listingId: string,price: number,hours: number,
@@ -361,29 +374,27 @@ export class PostgresDatabaseAdapter implements IDatabaseAdapter {
       const details = { vehicleName:`${vehicle.brand} ${vehicle.model}`,variantName:vehicle.variant,color:vehicle.color,notes:data.notes };
       const id = await this.insertBooking(db,data.customerId,data.dealerId,data.listingId,listing.price,data.lockDurationHours ?? 72,details,data.bookingDate);
       await notify(db,listing.userId,'New booking request',`A customer requested a booking for the ${details.vehicleName}.`,'booking');
-      return one<Booking>(db,`SELECT data FROM (${bookingView}) b WHERE id=$1`,[id]);
+      return one<Booking>(db,`SELECT data FROM (${bookingView}) b WHERE currency='INR' AND id=$1`,[id]);
     })),
-    getAll: () => this.respond(() => rows<Booking>(this.pool,`SELECT data FROM (${bookingView}) b ORDER BY data->>'createdAt' DESC`)),
-    getByCustomerId: id => this.respond(() => rows<Booking>(this.pool,`SELECT data FROM (${bookingView}) b WHERE customer_id=$1 ORDER BY data->>'createdAt' DESC`,[validate.id.parse(id)])),
-    getByDealerId: id => this.respond(() => rows<Booking>(this.pool,`SELECT data FROM (${bookingView}) b WHERE dealer_id=$1 ORDER BY data->>'createdAt' DESC`,[validate.id.parse(id)])),
+    getAll: () => this.respond(() => rows<Booking>(this.pool,`SELECT data FROM (${bookingView}) b WHERE currency='INR' ORDER BY data->>'createdAt' DESC`)),
+    getByCustomerId: id => this.respond(() => rows<Booking>(this.pool,`SELECT data FROM (${bookingView}) b WHERE currency='INR' AND customer_id=$1 ORDER BY data->>'createdAt' DESC`,[validate.id.parse(id)])),
+    getByDealerId: id => this.respond(() => rows<Booking>(this.pool,`SELECT data FROM (${bookingView}) b WHERE currency='INR' AND dealer_id=$1 ORDER BY data->>'createdAt' DESC`,[validate.id.parse(id)])),
     updateStatus: (id,status) => this.respond(() => this.transaction(async db => {
       const key = validate.id.parse(id);
       const next = validate.bookingStatus.parse(status);
       const current = await one<Booking['status']>(db,'SELECT status AS data FROM bestbuy.bookings WHERE id=$1 FOR UPDATE',[key]);
-      const transitions: Record<Booking['status'],Booking['status'][]> = {
-        pending:['confirmed','cancelled','expired'], confirmed:['payment_pending','booked','cancelled','expired'],
-        payment_pending:['booked','cancelled','expired'], booked:['completed','cancelled'], completed:[], cancelled:[], expired:[],
-      };
       if (current !== next) {
-        if (!transitions[current].includes(next)) return reject('Invalid booking transition.');
+        if (!canChangeBooking(current,next)) return reject('Invalid booking transition.');
         await db.query(`UPDATE bestbuy.bookings SET status=$2,updated_at=now(),
           status_history=status_history || jsonb_build_array(jsonb_build_object('status',$2::text,'timestamp',now())) WHERE id=$1`,[key,next]);
+        const customer = await one<string>(db,'SELECT customer_id AS data FROM bestbuy.bookings WHERE id=$1',[key]);
+        await notify(db,customer,'Booking updated',`Your booking is now ${next.replace(/_/g,' ')}.`,'booking');
         if (next === 'confirmed') {
           const actor = await one<string>(db,`SELECT d.user_id AS data FROM bestbuy.bookings b JOIN bestbuy.dealers d ON d.id=b.dealer_id WHERE b.id=$1`,[key]);
           await audit(db,'Booking accepted',actor,key,'Dealer confirmed the booking');
         }
       }
-      return one<Booking>(db,`SELECT data FROM (${bookingView}) b WHERE id=$1`,[key]);
+      return one<Booking>(db,`SELECT data FROM (${bookingView}) b WHERE currency='INR' AND id=$1`,[key]);
     })),
   };
 

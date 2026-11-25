@@ -27,7 +27,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onComplete }) => {
       <div className="flex flex-col items-center gap-6">
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
+          <div className="w-14 h-14 bg-slate-600 rounded-2xl flex items-center justify-center shadow-lg shadow-slate-200">
             <Car size={28} className="text-white" />
           </div>
           <div>
@@ -39,7 +39,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onComplete }) => {
         {/* Progress bar */}
         <div className="w-56 h-1 bg-slate-100 rounded-full overflow-hidden">
           <div
-            className="h-full bg-blue-600 rounded-full transition-all duration-100"
+            className="h-full bg-slate-600 rounded-full transition-all duration-100"
             style={{ width: `${progress}%` }}
           />
         </div>

@@ -16,7 +16,7 @@ const sizeStyles = {
 export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ size = 'md', className }) => {
   return (
     <svg
-      className={cn('animate-spin text-blue-600', sizeStyles[size], className)}
+      className={cn('animate-spin text-slate-600', sizeStyles[size], className)}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"

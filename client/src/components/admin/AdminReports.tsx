@@ -75,7 +75,7 @@ export function AdminReports({ data, now }: { data: AdminData; now: number }) {
     <section className="space-y-3">
       <div className="flex justify-between gap-3">
         <h2 className="text-lg font-semibold">Vehicle demand</h2>
-        <Link to="/admin/demand" className="text-sm font-medium text-blue-700">View demand and pricing</Link>
+        <Link to="/admin/demand" className="text-sm font-medium text-slate-700">View demand and pricing</Link>
       </div>
       <BarChart title="Highest demand scores" maximum={100} points={markets.slice(0, 8).map(market => ({
         label: `${market.modelName} ${market.variantName} · ${market.city}`, value: market.score,

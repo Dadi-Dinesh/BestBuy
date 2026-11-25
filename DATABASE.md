@@ -33,3 +33,26 @@ The installed app should use a dedicated PostgreSQL login for the runtime connec
 - Offer acceptance and booking creation are atomic. The booking saves its accepted price and lock expiry independently of later inventory updates. Listing removal retains the records needed by booking history and pricing audits.
 
 Run `npm run db:verify` with a credential allowed to create schemas to test actual PostgreSQL operations. The test creates a uniquely named schema and drops only that schema after verification. All three database commands accept `BESTBUY_ENV_FILE` as an optional path to a private configuration file.
+
+## India Edition
+
+Run `npm run db:migrate` before using the India Edition against an existing database. Migration 002 seeds 88 reference models and adds test-drive slots, requests, history and a marketplace booking-window setting. It does not create dealer inventory or change existing listing, offer or booking amounts. Review historical currency and location data before exposing older records in the INR interface.
+
+Dealer slots use India Standard Time. A database index permits just one occupying request per dealer, day and time, even across different variants. Requests await dealer confirmation. The Electron demo stores catalogue edits and test-drive requests under the local application profile. Demo accounts and inventory still reset when the mock adapter restarts. Browser-demo preferences and favourites are per device.
+
+`npm run test:desktop` checks the Electron demo flows. `npm run db:verify` checks the database workflows in a disposable schema.
+
+## Marketplace redesign and demo seed
+
+Migration 003 declares INR for new inventory, offers and bookings, and adds seed ownership and password recovery tables. Apply it with `npm run db:migrate`. Monetary records from before migration 003 keep an unclassified currency and are excluded from marketplace screens. Review their source denomination before setting a historical record's currency to INR. The migration does not drop or convert any historical records.
+
+Use a dedicated demo database for the Indian demo dataset. Set `DATABASE_URL` and `BESTBUY_DEMO_PASSWORD` (at least 12 characters) privately, then run:
+
+```bash
+npm run db:migrate
+npm run db:seed:india
+```
+
+The seed creates five clearly labelled demo dealers, four customers, 48 listings, queue activity, a dealer offer, a vehicle booking and four test-drive examples. Its ownership registry and stable IDs make reruns skip existing seed rows. It reports created, updated, skipped and verified totals. The account emails use the reserved `india-demo.bestbuy.example` domain. The seed leaves existing accounts untouched.
+
+For PostgreSQL password recovery, verify the account owner's identity before issuing a code with `npm run db:recovery -- account@example.com`. Share the one-time code securely with that account owner. The reset page accepts the code for 30 minutes. The application has no email delivery service.

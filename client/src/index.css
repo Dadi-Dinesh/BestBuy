@@ -17,8 +17,8 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: #F7F7F7;
+    color: #111111;
   }
 
   ::-webkit-scrollbar {
@@ -27,22 +27,22 @@
   }
 
   ::-webkit-scrollbar-track {
-    background: #f1f5f9;
+    background: #F7F7F7;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
+    background: #E5E5E5;
     border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #A3A3A3;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-600 text-white text-sm font-medium rounded-lg hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
   }
 
   .btn-secondary {
@@ -50,11 +50,11 @@
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-600 text-white text-sm font-medium rounded-lg hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
   }
 
   .input-field {
-    @apply w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-50 disabled:text-slate-500;
+    @apply w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent disabled:bg-slate-50 disabled:text-slate-500;
   }
 
   .card {
@@ -73,3 +73,34 @@
     @apply block text-sm font-medium text-slate-700 mb-1;
   }
 }
+
+:root {
+  --canvas:255 255 255; --action-ink:255 255 255; --radius-control:0.375rem; --radius-panel:0.75rem;
+  --space-panel:1.5rem; --shadow-panel:0 1px 2px rgb(0 0 0 / 0.07); --transition-control:150ms ease;
+  color-scheme: light;
+  --surface:255 255 255;
+  --tone-50:247 247 247; --tone-100:240 240 240; --tone-200:229 229 229;
+  --tone-300:196 196 196; --tone-400:111 111 111; --tone-500:102 102 102;
+  --tone-600:17 17 17; --tone-700:47 47 47; --tone-800:30 30 30;
+  --tone-900:17 17 17; --tone-950:10 10 10;
+}
+:root[data-theme='dark'] {
+  --canvas:16 16 16; --action-ink:17 17 17;
+  color-scheme: dark;
+  --surface:30 30 30;
+  --tone-50:24 24 24; --tone-100:40 40 40; --tone-200:48 48 48;
+  --tone-300:86 86 86; --tone-400:163 163 163; --tone-500:163 163 163;
+  --tone-600:255 255 255; --tone-700:216 216 216; --tone-800:230 230 230;
+  --tone-900:255 255 255; --tone-950:255 255 255;
+}
+body { background: rgb(var(--canvas)); color: rgb(var(--tone-900)); }
+::-webkit-scrollbar-track { background: rgb(var(--tone-100)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--tone-300)); }
+dialog::backdrop { background: rgb(0 0 0 / 0.55); }
+
+.card { border-radius:var(--radius-panel); box-shadow:var(--shadow-panel); }
+.btn-primary,.btn-secondary,.btn-danger,.input-field { border-radius:var(--radius-control); transition:background-color var(--transition-control),border-color var(--transition-control); }
+:focus-visible { outline:2px solid rgb(var(--tone-500)); outline-offset:3px; }
+::selection { background:rgb(var(--tone-600)); color:rgb(var(--surface)); }
+
+.btn-primary,.btn-danger { color:rgb(var(--action-ink)); }

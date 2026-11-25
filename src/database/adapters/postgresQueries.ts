@@ -11,7 +11,7 @@ SELECT u.id,u.role,u.status,u.email,u.password_hash,
   'name',u.name,'phoneNumber',u.phone,'createdAt',u.created_at,'dealerProfile',d.data)) AS data
 FROM bestbuy.users u LEFT JOIN (${dealerView}) d ON d.user_id=u.id`;
 export const listingView = `
-SELECT i.id,i.dealer_id,i.location_id,i.variant_id,i.deleted_at,dl.city_id,d.status AS dealer_status,
+SELECT i.id,i.dealer_id,i.location_id,i.variant_id,i.deleted_at,i.currency,dl.city_id,d.status AS dealer_status,
   v.id AS model_id, v.brand,v.model,t.name AS variant,c.name AS city, i.availability,
   i.details || jsonb_build_object('id',i.id,'dealerId',i.dealer_id,'vehicleModelId',v.id,'variantId',t.id,
     'brand',v.brand,'model',v.model,'variant',t.name,'price',i.dealer_price,'dealerOfferPrice',i.dealer_price,
@@ -32,14 +32,14 @@ FROM bestbuy.queue_entries e JOIN bestbuy.shared_queues q ON q.id=e.queue_id JOI
 JOIN bestbuy.vehicle_variants t ON t.id=q.variant_id JOIN bestbuy.vehicles v ON v.id=t.vehicle_id
 JOIN bestbuy.users u ON u.id=e.customer_id`;
 export const offerView = `
-SELECT o.id,o.customer_id,o.dealer_id,o.queue_entry_id,o.status,
+SELECT o.id,o.customer_id,o.dealer_id,o.queue_entry_id,o.status,o.currency,
   o.details || jsonb_strip_nulls(jsonb_build_object('id',o.id,'queueEntryId',o.queue_entry_id,
     'customerId',o.customer_id,'customerName',u.name,'dealerId',o.dealer_id,'dealerName',d.name,'listingId',o.listing_id,
     'offeredPrice',o.offered_price,'originalPrice',o.original_price,'expiryDate',o.expires_at,'createdAt',o.created_at,
     'status',CASE WHEN o.status='pending' AND o.expires_at<=now() THEN 'expired' ELSE o.status END)) AS data
 FROM bestbuy.offers o JOIN bestbuy.users u ON u.id=o.customer_id JOIN bestbuy.dealers d ON d.id=o.dealer_id`;
 export const bookingView = `
-SELECT b.id,b.customer_id,b.dealer_id,b.status,
+SELECT b.id,b.customer_id,b.dealer_id,b.status,b.currency,
   b.details || jsonb_strip_nulls(jsonb_build_object('id',b.id,'customerId',b.customer_id,'customerName',u.name,
     'customerPhone',u.phone,'dealerId',b.dealer_id,'listingId',b.listing_id,'offerId',b.offer_id,
     'status',b.status,'bookingDate',b.booked_for,'lockedPrice',b.locked_price,'lockDurationHours',b.lock_hours,

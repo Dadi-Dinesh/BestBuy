@@ -11,11 +11,11 @@ interface BadgeProps {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  default: 'bg-blue-50 text-blue-700 border-blue-100',
-  success: 'bg-green-50 text-green-700 border-green-100',
-  warning: 'bg-amber-50 text-amber-700 border-amber-100',
-  danger: 'bg-red-50 text-red-700 border-red-100',
-  info: 'bg-sky-50 text-sky-700 border-sky-100',
+  default: 'bg-slate-50 text-slate-700 border-slate-100',
+  success: 'bg-slate-50 text-slate-700 border-slate-100',
+  warning: 'bg-slate-50 text-slate-700 border-slate-100',
+  danger: 'bg-slate-50 text-slate-700 border-slate-100',
+  info: 'bg-slate-50 text-slate-700 border-slate-100',
   neutral: 'bg-slate-50 text-slate-600 border-slate-200',
 };
 

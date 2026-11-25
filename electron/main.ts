@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import { pathToFileURL } from 'node:url';
 import * as dotenv from 'dotenv';
 import { registerIpcHandlers } from './ipcHandlers';
 import { getDatabaseAdapter, type IDatabaseAdapter } from '../src/database';
@@ -13,6 +14,15 @@ const isDev = process.env.DATA_ADAPTER !== 'postgres' && (process.env.NODE_ENV =
 
 let mainWindow: BrowserWindow | null = null;
 
+const rendererPath = path.join(app.getAppPath(), 'client/dist/index.html');
+const rendererUrl = pathToFileURL(rendererPath).href;
+const devUrl = 'http://localhost:5173/';
+
+function trustedRenderer(url: string | undefined) {
+  const page = url?.split('#',1)[0];
+  return page === rendererUrl || (isDev && page === devUrl);
+}
+
 function createWindow(): void {
   // Find preload.js (handles both direct outDir and nested electron outDir)
   const preloadDirect = path.join(__dirname, 'preload.js');
@@ -20,7 +30,7 @@ function createWindow(): void {
   const preloadPath = fs.existsSync(preloadDirect) ? preloadDirect : preloadNested;
 
   // Find icon
-  const iconCandidate = path.resolve(__dirname, '../../client/public/icon.png');
+  const iconCandidate = path.resolve(__dirname, '../../client/dist/icon.png');
   const iconPath = fs.existsSync(iconCandidate) ? iconCandidate : undefined;
 
   mainWindow = new BrowserWindow({
@@ -31,7 +41,7 @@ function createWindow(): void {
     minHeight: 700,
     frame: true,
     titleBarStyle: 'default',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#111111',
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -43,31 +53,21 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.on('will-navigate', event => event.preventDefault());
+  mainWindow.webContents.on('will-redirect', event => event.preventDefault());
+  mainWindow.webContents.on('will-attach-webview', event => event.preventDefault());
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  if (isDev && process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-  } else if (isDev && !process.env.ELECTRON_START_URL) {
-    // Try local Vite dev server
-    mainWindow.loadURL('http://localhost:5173').catch(() => {
-      // Fallback to static dist if dev server is not running
-      loadStaticIndex();
-    });
-  } else {
-    loadStaticIndex();
-  }
+  mainWindow.webContents.session.setPermissionRequestHandler((_contents,_permission,reply) => reply(false));
+  mainWindow.webContents.session.setPermissionCheckHandler(() => false);
 
-  function loadStaticIndex() {
-    const candidates = [
-      path.resolve(__dirname, '../../client/dist/index.html'),
-      path.resolve(__dirname, '../client/dist/index.html'),
-      path.resolve(app.getAppPath(), 'client/dist/index.html'),
-    ];
-    const target = candidates.find(p => fs.existsSync(p));
-    if (target && mainWindow) {
-      mainWindow.loadFile(target);
-    } else {
-      console.warn('[Electron Main] Could not locate index.html, waiting or loading default');
-    }
+  const loadStatic = () => mainWindow?.loadFile(rendererPath).catch(() => {
+    if (!mainWindow) return;
+    dialog.showErrorBox('BestBuy could not start', 'The application interface could not be loaded.');
+    mainWindow.close();
+  });
+  if (isDev && !process.env.ELECTRON_START_URL) {
+    void mainWindow.loadURL(devUrl).catch(loadStatic);
+  } else {
+    void loadStatic();
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -83,7 +83,7 @@ app.whenReady().then(async () => {
   try {
     adapter = getDatabaseAdapter();
     await adapter.connect();
-    registerIpcHandlers(ipcMain, adapter);
+    registerIpcHandlers(ipcMain, adapter, event => event.sender === mainWindow?.webContents && trustedRenderer(event.senderFrame?.url));
   } catch {
     dialog.showErrorBox('BestBuy database unavailable', 'Check the database configuration and apply the BestBuy schema before starting.');
     app.quit();

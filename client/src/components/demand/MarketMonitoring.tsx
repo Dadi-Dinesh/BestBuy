@@ -64,7 +64,7 @@ export function BarChart({ title, points, format = String, maximum }: {
           <li key={label} className="grid grid-cols-[minmax(7rem,1fr)_1fr_auto] items-center gap-2 text-xs text-slate-700">
             <span>{label}</span>
             <div aria-hidden="true" className="h-2 rounded bg-slate-100">
-              <div className="h-2 rounded bg-blue-600" style={{ width: `${(value ?? 0) / scale * 100}%` }} />
+              <div className="h-2 rounded bg-slate-600" style={{ width: `${(value ?? 0) / scale * 100}%` }} />
             </div>
             <span className="tabular-nums">{value === null ? 'No offers' : format(value)}</span>
           </li>
@@ -119,9 +119,9 @@ export function MarketMonitoring({ monitor, dealerId }: { monitor: ReturnType<ty
           <h2 className="text-lg font-bold text-slate-900">Demand and pricing</h2>
           <p className="text-sm text-slate-500">BestBuy {demo ? 'demo' : 'marketplace'} activity. Scores use active buyers, active offers, stock, completed bookings and booking activity in the last seven days.</p>
         </div>
-        <button type="button" className="text-sm font-semibold text-blue-700" onClick={refresh}>Refresh data</button>
+        <button type="button" className="text-sm font-semibold text-slate-700" onClick={refresh}>Refresh data</button>
       </div>
-      {error && <p role="alert" className="text-sm text-red-700">Market data could not be refreshed.</p>}
+      {error && <p role="alert" className="text-sm text-slate-700">Market data could not be refreshed.</p>}
       {!data ? <p className="text-sm text-slate-500">{error ? 'Try refreshing the data.' : 'Loading market data…'}</p> : <>
         <Card>
           <CardHeader title={dealerId ? 'Demand for your inventory' : 'Vehicle demand by city'} />
@@ -163,10 +163,10 @@ export function MarketMonitoring({ monitor, dealerId }: { monitor: ReturnType<ty
           </select>
         </label>
         {(!dealerId || selected) && <div className="grid gap-4 lg:grid-cols-2">
-          <BarChart title="Queue joins · last 7 days (UTC)" points={trends.map(point => ({ label: point.label, value: point.joined }))} />
-          <BarChart title="Bookings created · last 7 days (UTC)" points={trends.map(point => ({ label: point.label, value: point.bookings }))} />
+          <BarChart title="Queue joins · last 7 days (IST)" points={trends.map(point => ({ label: point.label, value: point.joined }))} />
+          <BarChart title="Bookings created · last 7 days (IST)" points={trends.map(point => ({ label: point.label, value: point.bookings }))} />
           {!dealerId && <>
-            <BarChart title="Average direct offer price · last 7 days (UTC)" points={trends.map(point => ({ label: point.label, value: point.averageOffer }))} format={formatCurrency} />
+            <BarChart title="Average direct offer price · last 7 days (IST)" points={trends.map(point => ({ label: point.label, value: point.averageOffer }))} format={formatCurrency} />
             <BarChart title="Average current dealer price by city" points={
               Array.from(new Set((selected ? [selected] : scope).map(market => market.city)), city => ({
                 label: city,

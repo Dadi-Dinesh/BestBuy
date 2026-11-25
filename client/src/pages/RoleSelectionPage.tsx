@@ -24,45 +24,45 @@ const roleCards: RoleCard[] = [
     title: 'Customer',
     tagline: 'Discover and compare vehicles from verified dealerships',
     badge: 'Buyer Account',
-    icon: <ShoppingBag size={24} className="text-blue-600" />,
-    iconBg: 'bg-blue-50 border-blue-100',
+    icon: <ShoppingBag size={24} className="text-slate-600" />,
+    iconBg: 'bg-slate-50 border-slate-100',
     features: [
       'Multi-dealer inventory comparison & search',
       'Join shared waitlist queues for high-demand models',
       'Receive competitive offers directly from dealerships',
       'Manage bookings and test drives seamlessly',
     ],
-    demoEmail: 'customer@demo.com',
+    demoEmail: 'customer@bestbuy.example',
   },
   {
     role: 'dealer',
     title: 'Dealership Partner',
     tagline: 'Showcase showroom inventory and acquire active car buyers',
     badge: 'Dealer Account',
-    icon: <Store size={24} className="text-indigo-600" />,
-    iconBg: 'bg-indigo-50 border-indigo-100',
+    icon: <Store size={24} className="text-slate-600" />,
+    iconBg: 'bg-slate-50 border-slate-100',
     features: [
       'Manage multiple showroom and dealership locations',
       'List vehicles with custom pricing and real-time availability',
       'Fulfill customer queue requests with target offers',
       'Analytics on vehicle views and customer demand',
     ],
-    demoEmail: 'dealer@demo.com',
+    demoEmail: 'dealer@bestbuy.example',
   },
   {
     role: 'admin',
     title: 'Administrator',
     tagline: 'Platform oversight, dealership verification, and system analytics',
     badge: 'System Admin',
-    icon: <ShieldCheck size={24} className="text-emerald-600" />,
-    iconBg: 'bg-emerald-50 border-emerald-100',
+    icon: <ShieldCheck size={24} className="text-slate-600" />,
+    iconBg: 'bg-slate-50 border-slate-100',
     features: [
       'Review and verify dealership registrations & licenses',
       'Platform-wide audit of listings, bookings, and queues',
       'User management across all buyer and dealer accounts',
       'Monitor data adapters and infrastructure health',
     ],
-    demoEmail: 'admin@demo.com',
+    demoEmail: 'admin@bestbuy.example',
   },
 ];
 
@@ -93,7 +93,7 @@ export const RoleSelectionPage: React.FC = () => {
       {/* Top Header */}
       <div className="max-w-6xl w-full mx-auto flex items-center justify-between pb-8 border-b border-slate-200">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-sm">
+          <div className="w-10 h-10 bg-slate-600 rounded-xl flex items-center justify-center text-white shadow-sm">
             <Car size={22} />
           </div>
           <div>
@@ -117,7 +117,7 @@ export const RoleSelectionPage: React.FC = () => {
       {/* Main Content */}
       <div className="max-w-6xl w-full mx-auto my-auto py-8">
         <div className="text-center max-w-2xl mx-auto mb-10">
-          <span className="inline-block px-3 py-1 bg-blue-50 border border-blue-100 rounded-full text-xs font-semibold text-blue-700 tracking-wide uppercase mb-3">
+          <span className="inline-block px-3 py-1 bg-slate-50 border border-slate-100 rounded-full text-xs font-semibold text-slate-700 tracking-wide uppercase mb-3">
             Role Architecture
           </span>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">
@@ -137,7 +137,7 @@ export const RoleSelectionPage: React.FC = () => {
                 key={rc.role}
                 padding="lg"
                 className={`flex flex-col justify-between relative transition-all duration-200 ${
-                  isCurrent ? 'ring-2 ring-blue-600 shadow-md' : 'hover:border-slate-300 hover:shadow-md'
+                  isCurrent ? 'ring-2 ring-slate-600 shadow-md' : 'hover:border-slate-300 hover:shadow-md'
                 }`}
               >
                 <div>
@@ -157,7 +157,7 @@ export const RoleSelectionPage: React.FC = () => {
                     <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Key Capabilities</p>
                     {rc.features.map((feat, i) => (
                       <div key={i} className="flex items-start gap-2 text-xs text-slate-600 leading-snug">
-                        <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0 mt-0.5" />
+                        <CheckCircle2 size={15} className="text-slate-500 flex-shrink-0 mt-0.5" />
                         <span>{feat}</span>
                       </div>
                     ))}
@@ -188,11 +188,11 @@ export const RoleSelectionPage: React.FC = () => {
       <div className="max-w-6xl w-full mx-auto text-center pt-6 border-t border-slate-200 text-xs text-slate-500 flex flex-col md:flex-row justify-between items-center gap-2">
         <span>BestBuy Desktop • Windows Client Foundation</span>
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/login')} className="hover:text-blue-600 transition-colors">
+          <button onClick={() => navigate('/login')} className="hover:text-slate-600 transition-colors">
             Custom Login
           </button>
           <span>•</span>
-          <button onClick={() => navigate('/register')} className="hover:text-blue-600 transition-colors">
+          <button onClick={() => navigate('/register')} className="hover:text-slate-600 transition-colors">
             Register Account
           </button>
         </div>

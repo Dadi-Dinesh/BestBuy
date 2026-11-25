@@ -36,9 +36,9 @@ export function recordPriceUpdate(audit: ReturnType<typeof createAuditLog>, befo
   const previous = pricingService.current(before);
   const next = pricingService.current(after);
   const changes = [
-    previous !== next && `Dealer price ${previous} → ${next} USD`,
-    before.exShowroomPrice !== after.exShowroomPrice && `Ex-showroom ${before.exShowroomPrice} → ${after.exShowroomPrice} USD`,
-    before.onRoadPrice !== after.onRoadPrice && `On-road ${before.onRoadPrice} → ${after.onRoadPrice} USD`,
+    previous !== next && `Dealer price ${previous} → ${next} INR`,
+    before.exShowroomPrice !== after.exShowroomPrice && `Ex-showroom ${before.exShowroomPrice} → ${after.exShowroomPrice} INR`,
+    before.onRoadPrice !== after.onRoadPrice && `On-road ${before.onRoadPrice} → ${after.onRoadPrice} INR`,
   ].filter(Boolean);
   if (changes.length) audit.record('Price updated', after.dealerId, after.id, changes.join(' · '));
 }

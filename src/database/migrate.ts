@@ -1,3 +1,4 @@
+import { indiaCatalogue } from '../data/indiaCatalogue';
 import { config } from 'dotenv';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -14,10 +15,14 @@ export async function migrate() {
       await client.query(`CREATE TABLE IF NOT EXISTS bestbuy.schema_migrations (
         version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now()
       )`);
-      const applied = await client.query('SELECT 1 FROM bestbuy.schema_migrations WHERE version=1');
-      if (!applied.rowCount) {
-        await client.query(await readFile(resolve(__dirname, '../../../src/database/migrations/001_initial.sql'), 'utf8'));
-        await client.query('INSERT INTO bestbuy.schema_migrations(version) VALUES (1)');
+      for (const [version,file] of [[1,'001_initial.sql'],[2,'002_india.sql'],[3,'003_marketplace_identity.sql']] as const) {
+        const applied=await client.query('SELECT 1 FROM bestbuy.schema_migrations WHERE version=$1',[version]);
+        if (applied.rowCount) continue;
+        await client.query(await readFile(resolve(__dirname,'../../../src/database/migrations',file),'utf8'));
+        if (version===2) for (const car of indiaCatalogue) {
+          await client.query('INSERT INTO bestbuy.india_catalogue(id,details) VALUES ($1,$2)',[car.id,car]);
+        }
+        await client.query('INSERT INTO bestbuy.schema_migrations(version) VALUES ($1)',[version]);
       }
       await client.query('COMMIT');
     } catch (error) {

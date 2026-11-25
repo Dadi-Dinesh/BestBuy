@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { cn } from '../../utils/helpers';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -19,7 +19,9 @@ export const Input: React.FC<InputProps> = ({
   id,
   ...props
 }) => {
-  const inputId = id || `input-${Math.random().toString(36).slice(2, 9)}`;
+  const generatedId = useId();
+  const inputId = id || generatedId;
+  const descriptionId = error || hint ? `${inputId}-description` : undefined;
 
   return (
     <div className="w-full">
@@ -36,11 +38,13 @@ export const Input: React.FC<InputProps> = ({
         )}
         <input
           id={inputId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={descriptionId}
           className={cn(
             'w-full px-3 py-2 text-sm border rounded-lg bg-white text-slate-900 placeholder-slate-400',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+            'focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent',
             'disabled:bg-slate-50 disabled:text-slate-500 transition-colors',
-            error ? 'border-red-300 focus:ring-red-500' : 'border-slate-200',
+            error ? 'border-slate-300 focus:ring-slate-500' : 'border-slate-200',
             leftElement ? 'pl-9' : '',
             rightElement ? 'pr-9' : '',
             className
@@ -53,8 +57,8 @@ export const Input: React.FC<InputProps> = ({
           </div>
         )}
       </div>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-      {hint && !error && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+      {error && <p id={descriptionId} className="mt-1 text-xs text-slate-600">{error}</p>}
+      {hint && !error && <p id={descriptionId} className="mt-1 text-xs text-slate-500">{hint}</p>}
     </div>
   );
 };

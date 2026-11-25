@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Car,
@@ -27,7 +27,12 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', icon: <LayoutDashboard size={18} />, roles: ['customer', 'dealer', 'admin'] },
   { label: 'Browse Cars', to: '/browse', icon: <Search size={18} />, roles: ['customer'] },
+  { label:'India Catalogue',to:'/catalogue',icon:<Car size={18}/>,roles:['customer'] },
+  { label:'My Garage',to:'/garage',icon:<Car size={18}/>,roles:['customer'] },
+  { label:'Test Drives',to:'/test-drives',icon:<BookOpen size={18}/>,roles:['customer','dealer','admin'] },
+  { label:'Catalogue Management',to:'/admin/catalogue',icon:<Car size={18}/>,roles:['admin'] },
   { label: 'Compare Dealers', to: '/compare', icon: <TrendingDown size={18} />, roles: ['customer'] },
+  { label:'My Offers',to:'/offers',icon:<BookOpen size={18}/>,roles:['customer'] },
   { label: 'My Queue', to: '/queue', icon: <ClipboardList size={18} />, roles: ['customer'] },
   { label: 'My Bookings', to: '/bookings', icon: <BookOpen size={18} />, roles: ['customer'] },
   { label: 'My Inventory', to: '/inventory', icon: <Car size={18} />, roles: ['dealer'] },
@@ -52,15 +57,15 @@ export const Sidebar: React.FC = () => {
   );
 
   return (
-    <aside className="w-60 min-h-screen bg-white border-r border-slate-200 flex flex-col">
+    <aside className="flex-none w-40 lg:w-52 xl:w-56 min-h-0 bg-white border-r border-slate-200 flex flex-col">
       {/* Logo */}
       <div className="h-16 flex items-center px-6 border-b border-slate-200">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+        <Link to="/" className="flex items-center gap-2.5">
+          <div className="w-8 h-8 bg-slate-600 rounded-lg flex items-center justify-center">
             <Car size={16} className="text-white" />
           </div>
-          <span className="text-lg font-bold text-slate-900 tracking-tight">BestBuy</span>
-        </div>
+          <span className="text-lg font-bold text-slate-900 tracking-tight">BestBuy <span className="text-xs text-slate-500">India</span></span>
+        </Link>
       </div>
 
       {/* Nav */}
@@ -73,18 +78,18 @@ export const Sidebar: React.FC = () => {
               cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors group',
                 isActive
-                  ? 'bg-blue-50 text-blue-700'
+                  ? 'bg-slate-100 text-slate-900 font-semibold'
                   : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               )
             }
           >
             {({ isActive }) => (
               <>
-                <span className={isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}>
+                <span className={isActive ? 'text-slate-600' : 'text-slate-400 group-hover:text-slate-600'}>
                   {item.icon}
                 </span>
                 <span className="flex-1">{item.label}</span>
-                {isActive && <ChevronRight size={14} className="text-blue-400" />}
+                {isActive && <ChevronRight size={14} className="text-slate-400" />}
               </>
             )}
           </NavLink>
@@ -96,13 +101,13 @@ export const Sidebar: React.FC = () => {
         <div className="px-3 py-2 rounded-lg bg-slate-50">
           <p className="text-xs text-slate-500">Signed in as</p>
           <p className="text-sm font-medium text-slate-800 truncate">{user?.name}</p>
-          <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100 capitalize">
+          <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-50 text-slate-700 border border-slate-100 capitalize">
             {user?.role}
           </span>
         </div>
         <button
           onClick={logout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-600 transition-colors"
         >
           <LogOut size={18} />
           Sign Out

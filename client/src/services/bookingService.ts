@@ -1,9 +1,11 @@
+import { indiaDemo } from '../../../src/data/indiaDemo';
+import { formatINR } from '../../../src/services/indiaFormat';
+import { canChangeBooking } from '../../../src/services/bookingTransitions';
 import { mockDealerCanTrade } from './dealerService';
 import { mockAudit } from './mockAudit';
 import { isMockCustomerSuspended } from './authService';
 import { pricingService } from '../../../src/services/pricingService';
 import { vehicleService } from './vehicleService';
-import { demandFixtures } from '../../../src/data/demandFixtures';
 import { ApiResponse, Booking, BookingStatus, VehicleListing, Dealer } from '../types';
 import { notificationService } from './notificationService';
 
@@ -14,114 +16,7 @@ function getAPI() {
   return null;
 }
 
-let mockBookings: Booking[] = [
-  ...demandFixtures().bookings,
-  {
-    id: 'b1',
-    customerId: 'u1',
-    customerName: 'Alice Johnson',
-    customerPhone: '+1 (555) 234-5678',
-    listingId: 'l1',
-    dealerId: 'd1',
-    status: 'confirmed',
-    bookingDate: new Date(Date.now() + 86400000 * 2).toISOString(),
-    lockedPrice: 28400,
-    lockDurationHours: 72,
-    priceLockedUntil: new Date(Date.now() + 86400000 * 3).toISOString(),
-    vehicleName: 'Toyota Camry',
-    variantName: 'LE',
-    color: 'Midnight Black Metallic',
-    notes: 'Test drive and inspection scheduled at Los Angeles showroom.',
-    statusHistory: [
-      { status: 'pending', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), note: 'Booking requested by customer' },
-      { status: 'confirmed', timestamp: new Date(Date.now() - 86400000).toISOString(), note: 'Confirmed by Premier Auto Group' },
-    ],
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
-    listing: {
-      id: 'l1',
-      dealerId: 'd1',
-      vehicleModelId: 'vm1',
-      variantId: 'vv1',
-      brand: 'Toyota',
-      model: 'Camry',
-      variant: 'LE',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'Automatic',
-      color: 'Midnight Black Metallic',
-      mileage: 12,
-      condition: 'new',
-      price: 28400,
-      exShowroomPrice: 26320,
-      onRoadPrice: 29800,
-      dealerOfferPrice: 28400,
-      quantity: 3,
-      deliveryTimeline: 'Immediate',
-      availability: 'available',
-      description: 'Brand new 2024 Toyota Camry LE in Midnight Black Metallic.',
-      images: ['https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-01T08:00:00Z',
-      updatedAt: '2024-02-01T08:00:00Z',
-    },
-    dealer: {
-      id: 'd1',
-      userId: 'u2',
-      dealershipName: 'Premier Auto Group',
-      registrationNumber: 'DL-CA-2023-8891',
-      contactPerson: 'Bob Smith',
-      phone: '+1 (310) 555-0100',
-      email: 'premier@autogroup.com',
-      address: '1234 Motor Avenue',
-      city: 'Los Angeles',
-      state: 'CA',
-      pinCode: '90025',
-      status: 'approved',
-      isVerified: true,
-      createdAt: '2024-01-05T08:00:00Z',
-    },
-  },
-  {
-    id: 'b2',
-    customerId: 'u6',
-    customerName: 'David Miller',
-    customerPhone: '+1 (555) 778-9900',
-    listingId: 'l1',
-    dealerId: 'd1',
-    status: 'payment_pending',
-    bookingDate: new Date(Date.now() + 86400000 * 4).toISOString(),
-    lockedPrice: 27950,
-    lockDurationHours: 48,
-    priceLockedUntil: new Date(Date.now() + 86400000 * 2).toISOString(),
-    vehicleName: 'Toyota Camry',
-    variantName: 'LE',
-    color: 'Midnight Black Metallic',
-    notes: 'Accepted dealer offer. Security deposit payment link transmitted to buyer.',
-    statusHistory: [
-      { status: 'pending', timestamp: new Date(Date.now() - 3600000 * 20).toISOString(), note: 'Offer accepted' },
-      { status: 'confirmed', timestamp: new Date(Date.now() - 3600000 * 12).toISOString(), note: 'Dealer confirmed vehicle allocation' },
-      { status: 'payment_pending', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), note: 'Deposit invoice sent to customer' },
-    ],
-    createdAt: new Date(Date.now() - 3600000 * 20).toISOString(),
-    updatedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    dealer: {
-      id: 'd1',
-      userId: 'u2',
-      dealershipName: 'Premier Auto Group',
-      registrationNumber: 'DL-CA-2023-8891',
-      contactPerson: 'Bob Smith',
-      phone: '+1 (310) 555-0100',
-      email: 'premier@autogroup.com',
-      address: '1234 Motor Avenue',
-      city: 'Los Angeles',
-      state: 'CA',
-      pinCode: '90025',
-      status: 'approved',
-      isVerified: true,
-      createdAt: '2024-01-05T08:00:00Z',
-    },
-  },
-];
+let mockBookings = indiaDemo().bookings;
 
 export const bookingService = {
   async getAll(): Promise<ApiResponse<Booking[]>> {
@@ -181,7 +76,7 @@ export const bookingService = {
       id: `b${Date.now()}`,
       customerId: data.customerId,
       customerName: data.customerName || 'Customer',
-      customerPhone: data.customerPhone || '+1 (555) 000-1234',
+      customerPhone: data.customerPhone || '+91 90000 12341',
       listingId: data.listingId,
       dealerId: data.dealerId,
       status: 'pending',
@@ -197,7 +92,7 @@ export const bookingService = {
         {
           status: 'pending',
           timestamp: new Date().toISOString(),
-          note: `Booking request initiated. Price of $${price.toLocaleString()} locked for ${lockHours} hours.`,
+          note: `Booking request initiated. Price of ${formatINR(price)} locked for ${lockHours} hours.`,
         },
       ],
       createdAt: new Date().toISOString(),
@@ -210,7 +105,7 @@ export const bookingService = {
     notificationService.add({
       userId: data.dealerId,
       title: 'New Booking Request',
-      message: `${newBooking.customerName} submitted a booking for ${newBooking.vehicleName}. Price locked at $${price.toLocaleString()}.`,
+      message: `${newBooking.customerName} submitted a booking for ${newBooking.vehicleName}. Price locked at ${formatINR(price)}.`,
       type: 'info',
       category: 'booking',
       linkTo: '/inventory',
@@ -254,7 +149,7 @@ export const bookingService = {
         {
           status: 'pending',
           timestamp: new Date().toISOString(),
-          note: `Offer accepted by customer. Price locked at $${data.lockedPrice.toLocaleString()} for ${data.lockDurationHours} hours.`,
+          note: `Offer accepted by customer. Price locked at ${formatINR(data.lockedPrice)} for ${data.lockDurationHours} hours.`,
         },
       ],
       createdAt: new Date().toISOString(),
@@ -278,7 +173,9 @@ export const bookingService = {
     const booking = mockBookings.find(b => b.id === id);
     if (!booking) return { success: false, error: 'Booking not found' };
 
-    if (booking.status !== status && status === 'confirmed') {
+    if (!canChangeBooking(booking.status,status)) return { success:false,error:'Invalid booking transition.' };
+    if (booking.status === status) return { success:true,data:booking };
+    if (status === 'confirmed') {
       mockAudit.record('Booking accepted', booking.dealerId, id, `Dealer confirmed ${booking.vehicleName || booking.listingId}`);
     }
     booking.status = status;
@@ -299,7 +196,7 @@ export const bookingService = {
     switch (status) {
       case 'confirmed':
         title = 'Booking Confirmed by Dealership!';
-        message = `Your showroom booking for ${booking.vehicleName} has been officially confirmed. The locked price of $${booking.lockedPrice.toLocaleString()} is guaranteed.`;
+        message = `Your showroom booking for ${booking.vehicleName} has been officially confirmed. The locked price of ${formatINR(booking.lockedPrice)} is guaranteed.`;
         type = 'success';
         break;
       case 'payment_pending':

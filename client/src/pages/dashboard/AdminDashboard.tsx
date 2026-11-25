@@ -21,7 +21,7 @@ const sections = [
   ['dashboard', 'Overview'], ['dealers', 'Dealers'], ['users', 'Customers'], ['listings', 'Listings'],
   ['queues', 'Shared queues'], ['reports', 'Reports'], ['demand', 'Demand and pricing'], ['audit', 'Audit log'],
 ];
-const textLink = 'font-semibold text-blue-700 hover:underline';
+const textLink = 'font-semibold text-slate-700 hover:underline';
 
 function Status({ value }: { value: string }) {
   const variant = ['active', 'approved', 'available', 'completed'].includes(value) ? 'success'
@@ -132,17 +132,17 @@ export function AdminDashboard() {
   return <div className="mx-auto max-w-7xl space-y-5">
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <p className="text-sm font-semibold text-blue-700">BestBuy administration</p>
+        <p className="text-sm font-semibold text-slate-700">BestBuy administration</p>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">{sections.find(([key]) => key === section)?.[1]}</h1>
       </div>
       <Button size="sm" variant="secondary" disabled={busy} onClick={() => { setError(''); setRefresh(count => count + 1); }}>Refresh</Button>
     </header>
     <nav aria-label="Administration" className="flex flex-wrap gap-1 border-b border-slate-200">
       {sections.map(([key, label]) => <NavLink key={key} end to={key === 'dashboard' ? '/dashboard' : `/admin/${key}`}
-        className={({ isActive }) => `border-b-2 px-3 py-2 text-sm font-semibold ${isActive ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-600 hover:text-blue-700'}`}>{label}</NavLink>)}
+        className={({ isActive }) => `border-b-2 px-3 py-2 text-sm font-semibold ${isActive ? 'border-slate-600 text-slate-700' : 'border-transparent text-slate-600 hover:text-slate-700'}`}>{label}</NavLink>)}
     </nav>
-    {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    {message && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{message}</p>}
+    {error && <p role="alert" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-800">{error}</p>}
+    {message && <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-800">{message}</p>}
     {!data && !error && <p role="status" className="text-sm text-slate-500">Loading administration data…</p>}
     {data && <>
       {section === 'dashboard' && <Overview data={data} now={now} />}
@@ -219,7 +219,7 @@ export function AdminDashboard() {
       {section === 'audit' && <AdminTable columns={['Time', 'Action', 'Actor', 'Record ID', 'Details']}
         empty="No actions have been recorded in this demo session."
         rows={audit.map(event => ({ key: String(event.id), cells: [
-          new Date(event.timestamp).toLocaleString(), event.action,
+          new Date(event.timestamp).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'}), event.action,
           data.users.find(user => user.id === event.actorId)?.name || data.dealers.find(dealer => dealer.id === event.actorId)?.dealershipName || event.actorId,
           event.targetId, event.detail,
         ] }))} />}
@@ -259,7 +259,7 @@ function Overview({ data, now }: { data: AdminData; now: number }) {
   ] as const;
   return <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
     {metrics.map(([label, value, to]) => <Link key={label} to={to}
-      className="rounded-xl border border-slate-200 bg-white p-4 hover:border-blue-300 hover:bg-blue-50/40">
+      className="rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300 hover:bg-slate-50/40">
       <p className="text-sm font-medium text-slate-600">{label}</p>
       <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">{value}</p>
     </Link>)}
@@ -283,7 +283,7 @@ function CustomerDetails({ customer, data, audit, close }: { customer: User; dat
       { id: `${booking.id}-status`, name: `Booking ${booking.status.replace(/_/g, ' ')}`, time: booking.updatedAt },
     ])),
   ].filter(event => event.time).sort((a, b) => Date.parse(b.time!) - Date.parse(a.time!));
-  return <section aria-label="Customer details" className="space-y-4 rounded-xl border border-blue-200 bg-blue-50/30 p-4">
+  return <section aria-label="Customer details" className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/30 p-4">
     <div className="flex flex-wrap justify-between gap-2">
       <div>
         <h2 className="text-lg font-bold">{customer.name} <Status value={customer.status ?? 'active'} /></h2>

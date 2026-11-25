@@ -1,10 +1,12 @@
+import { indiaLocations } from '../data/indiaLocations';
 import { z } from 'zod';
 export const id = z.uuid();
 const label = z.string().trim().min(1).max(200);
 export const note = z.string().trim().max(3000);
 export const date = z.iso.datetime({ offset: true }).or(z.iso.date());
 export const money = z.number().positive().max(999999999999.99).refine(value => Math.abs(value * 100 - Math.round(value * 100)) < 0.001);
-export const location = z.object({ city: label, state: label, address: label, pinCode: label });
+export const location = z.object({ city: label, state: label, address: label, pinCode: z.string().trim().regex(/^[1-9]\d{5}$/) });
+export const isIndianLocation = (value:{state:string;city:string}) => indiaLocations[value.state]?.includes(value.city) === true;
 export const adminInput = z.object({ email: z.email().max(254).transform(value => value.toLowerCase()), name: label, password: z.string().min(12).max(256) });
 export const authInput = z.object({ email: z.email().max(254).transform(value => value.toLowerCase()), password: z.string().min(1).max(256) });
 const register = authInput.extend({ name: label, phoneNumber: label, password: z.string().min(8).max(256) });

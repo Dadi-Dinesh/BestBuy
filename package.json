@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:electron\"",
     "dev:client": "cd client && npm run dev",
-    "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
+    "dev:electron": "npm run build:electron && wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
     "build": "npm run build:client && npm run build:electron",
     "build:client": "cd client && npm run build",
     "build:electron": "tsc -p tsconfig.json",
@@ -14,15 +14,20 @@
     "start": "electron .",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
-    "dist:win": "npm run build && electron-builder --win",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "db:migrate": "npm run build:electron && node dist-electron/src/database/migrate.js",
     "db:verify": "npm run build:electron && node scripts/verify-postgres.cjs",
-    "db:create-admin": "npm run build:electron && node dist-electron/src/database/bootstrapAdmin.js"
+    "db:create-admin": "npm run build:electron && node dist-electron/src/database/bootstrapAdmin.js",
+    "dist:win:arm64": "npm run build && electron-builder --win nsis --arm64 --publish never",
+    "build:win": "npm run build && electron-builder --win --x64 --dir --publish never",
+    "test:desktop": "npm run build && node scripts/verify-desktop.cjs",
+    "db:seed:india": "npm run build:electron && node dist-electron/src/database/seedIndia.js",
+    "db:recovery": "npm run build:electron && node dist-electron/src/database/passwordRecovery.js"
   },
   "build": {
     "appId": "com.bestbuy.marketplace",
     "productName": "BestBuy",
-    "copyright": "Copyright © 2024 BestBuy Automotive Marketplace",
+    "copyright": "Copyright \u00a9 2024 BestBuy Automotive Marketplace",
     "directories": {
       "output": "release"
     },
@@ -39,17 +44,23 @@
       "category": "public.app-category.business"
     },
     "win": {
-      "target": [
-        "nsis",
-        "zip"
-      ]
+      "icon": "assets/icon.ico",
+      "target": "nsis",
+      "artifactName": "BestBuy-Setup-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "shortcutName": "BestBuy",
+      "uninstallDisplayName": "BestBuy",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    },
+    "toolsets": {
+      "nsis": "1.2.1"
     }
   },
   "keywords": [
@@ -60,7 +71,9 @@
     "desktop-app",
     "windows"
   ],
-  "author": "",
+  "author": {
+    "name": "BestBuy Automotive Marketplace"
+  },
   "license": "ISC",
   "dependencies": {
     "dotenv": "^16.4.5",
@@ -72,8 +85,9 @@
     "@types/pg": "^8.23.1",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
-    "electron": "^28.3.3",
+    "electron": "^45.4.1",
     "electron-builder": "^26.18.0",
+    "playwright-core": "^1.65.1",
     "typescript": "^5.3.3",
     "wait-on": "^7.2.0"
   }

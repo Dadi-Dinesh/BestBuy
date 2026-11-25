@@ -12,12 +12,16 @@ export function desktopAPI() {
   } }).electronAPI;
 }
 
-export function useDemoMode() {
-  const [demo, setDemo] = useState(!desktopAPI());
+export function useDatabaseMode() {
+  const [database, setDatabase] = useState<boolean | null>(desktopAPI() ? null : false);
   useEffect(() => {
     let active = true;
-    void desktopAPI()?.usesDatabase().then(live => { if (active) setDemo(!live); }).catch(() => undefined);
+    void desktopAPI()?.usesDatabase().then(live => { if (active) setDatabase(live); }).catch(() => undefined);
     return () => { active = false; };
   }, []);
-  return demo;
+  return database;
+}
+
+export function useDemoMode() {
+  return useDatabaseMode() === false;
 }

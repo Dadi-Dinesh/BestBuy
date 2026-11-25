@@ -1,3 +1,5 @@
+import { indiaLocations } from '../../../../src/data/indiaLocations';
+import { SelectField } from '../india/IndiaCatalogue';
 import React, { useState, useEffect } from 'react';
 import {
   Building2,
@@ -68,6 +70,9 @@ export const DealershipProfilePage: React.FC = () => {
       return;
     }
 
+    if (!indiaLocations[state]?.includes(city) || !/^[1-9]\d{5}$/.test(pinCode.trim())) {
+      setFeedback({type:'error',message:'Select an Indian state and city and enter a six-digit PIN code.'});return;
+    }
     setIsSaving(true);
     setFeedback(null);
 
@@ -102,21 +107,21 @@ export const DealershipProfilePage: React.FC = () => {
     switch (status) {
       case 'approved':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200">
             <CheckCircle2 size={13} />
             Verified & Approved
           </span>
         );
       case 'pending':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200">
             <Clock size={13} />
             Pending Verification
           </span>
         );
       case 'rejected':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200">
             <XCircle size={13} />
             Application Rejected
           </span>
@@ -153,8 +158,8 @@ export const DealershipProfilePage: React.FC = () => {
         <div
           className={`p-3.5 rounded-xl border flex items-center gap-2.5 text-xs font-medium ${
             feedback.type === 'success'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : 'bg-red-50 border-red-200 text-red-800'
+              ? 'bg-slate-50 border-slate-200 text-slate-800'
+              : 'bg-slate-50 border-slate-200 text-slate-800'
           }`}
         >
           {feedback.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
@@ -168,7 +173,7 @@ export const DealershipProfilePage: React.FC = () => {
         <div className="space-y-6">
           <Card padding="md" className="border-slate-200">
             <div className="flex flex-col items-center text-center p-2">
-              <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 mb-3 shadow-sm">
+              <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600 mb-3 shadow-sm">
                 <Building2 size={32} />
               </div>
               <h3 className="text-lg font-bold text-slate-900">{dealer?.dealershipName || 'My Dealership'}</h3>
@@ -200,7 +205,7 @@ export const DealershipProfilePage: React.FC = () => {
           {/* Verification Status Card */}
           <Card padding="md" className="border-slate-200">
             <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-              <ShieldCheck size={14} className="text-blue-600" />
+              <ShieldCheck size={14} className="text-slate-600" />
               Verification Details
             </h4>
             <div className="space-y-2 text-xs text-slate-600">
@@ -274,20 +279,10 @@ export const DealershipProfilePage: React.FC = () => {
                 />
 
                 <div className="grid grid-cols-3 gap-3">
+                  <SelectField name="State" value={state} options={Object.keys(indiaLocations)} onChange={value=>{setState(value);setCity('');}} placeholder="Select state"/>
+                  <SelectField name="City" value={city} options={indiaLocations[state]??[]} onChange={setCity} placeholder="Select city"/>
                   <Input
-                    label="City"
-                    value={city}
-                    onChange={e => setCity(e.target.value)}
-                    required
-                  />
-                  <Input
-                    label="State"
-                    value={state}
-                    onChange={e => setState(e.target.value)}
-                    required
-                  />
-                  <Input
-                    label="PIN / ZIP Code"
+                    label="PIN code Code"
                     value={pinCode}
                     onChange={e => setPinCode(e.target.value)}
                     required

@@ -3,6 +3,7 @@ import type { AuditEntry } from '../services/auditLog';
 import type { ListingPriceChange } from '../services/pricingService';
 import {
   User,
+  Notification,
   Dealer,
   VehicleListing,
   QueueEntry,
@@ -20,6 +21,8 @@ export type { AdminStats } from '../services/adminMetrics';
 export interface IDatabaseAdapter {
   readonly name: string;
   connect(): Promise<void>;
+  getNotifications?(userId: string): Promise<ApiResponse<Notification[]>>;
+  readNotifications?(userId: string, id?: string): Promise<ApiResponse<boolean>>;
   disconnect(): Promise<void>;
 
   auth: {

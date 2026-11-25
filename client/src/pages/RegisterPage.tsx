@@ -1,3 +1,6 @@
+import { AuthLayout } from '../components/layout/AuthLayout';
+import { indiaLocations } from '../../../src/data/indiaLocations';
+import { SelectField } from './india/IndiaCatalogue';
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -93,9 +96,9 @@ export const RegisterPage: React.FC = () => {
       if (!city.trim()) newErrors.city = 'City is required.';
       if (!state.trim()) newErrors.state = 'State is required.';
       if (!pinCode.trim()) {
-        newErrors.pinCode = 'PIN/ZIP code is required.';
-      } else if (!/^\d{4,8}$/.test(pinCode.replace(/\s|-/g, ''))) {
-        newErrors.pinCode = 'Please enter a valid PIN code.';
+        newErrors.pinCode = 'PIN code code is required.';
+      } else if (!/^[1-9]\d{5}$/.test(pinCode.replace(/\s|-/g, ''))) {
+        newErrors.pinCode = 'Enter a six-digit Indian PIN code.';
       }
     }
 
@@ -163,11 +166,11 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8">
+    <AuthLayout>
       <div className="sm:mx-auto sm:w-full sm:max-w-xl">
         {/* Brand */}
         <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <div className="w-11 h-11 bg-slate-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-slate-500/20">
             <Car size={24} />
           </div>
           <div>
@@ -201,11 +204,11 @@ export const RegisterPage: React.FC = () => {
                 className={cn(
                   'flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all',
                   role === 'customer'
-                    ? 'border-blue-600 bg-blue-50/70 text-blue-900 ring-2 ring-blue-500/20 shadow-sm'
+                    ? 'border-slate-600 bg-slate-50/70 text-slate-900 ring-2 ring-slate-500/20 shadow-sm'
                     : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                 )}
               >
-                <div className={cn('p-2 rounded-lg', role === 'customer' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500')}>
+                <div className={cn('p-2 rounded-lg', role === 'customer' ? 'bg-slate-600 text-white' : 'bg-slate-100 text-slate-500')}>
                   <ShoppingBag size={18} />
                 </div>
                 <div>
@@ -224,11 +227,11 @@ export const RegisterPage: React.FC = () => {
                 className={cn(
                   'flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all',
                   role === 'dealer'
-                    ? 'border-blue-600 bg-blue-50/70 text-blue-900 ring-2 ring-blue-500/20 shadow-sm'
+                    ? 'border-slate-600 bg-slate-50/70 text-slate-900 ring-2 ring-slate-500/20 shadow-sm'
                     : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                 )}
               >
-                <div className={cn('p-2 rounded-lg', role === 'dealer' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500')}>
+                <div className={cn('p-2 rounded-lg', role === 'dealer' ? 'bg-slate-600 text-white' : 'bg-slate-100 text-slate-500')}>
                   <Store size={18} />
                 </div>
                 <div>
@@ -241,17 +244,17 @@ export const RegisterPage: React.FC = () => {
 
           {/* General Error Banner */}
           {generalError && (
-            <div className="mb-6 p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-              <AlertCircle size={18} className="text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700 font-medium">{generalError}</p>
+            <div className="mb-6 p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3">
+              <AlertCircle size={18} className="text-slate-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-slate-700 font-medium">{generalError}</p>
             </div>
           )}
 
           {/* Success Banner */}
           {successMessage && (
-            <div className="mb-6 p-3.5 bg-green-50 border border-green-200 rounded-xl flex items-start gap-3">
-              <CheckCircle2 size={18} className="text-green-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-green-700 font-medium">{successMessage}</p>
+            <div className="mb-6 p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3">
+              <CheckCircle2 size={18} className="text-slate-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-slate-700 font-medium">{successMessage}</p>
             </div>
           )}
 
@@ -294,7 +297,7 @@ export const RegisterPage: React.FC = () => {
                   <Input
                     label="Phone Number"
                     type="tel"
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="+91 98765 43210"
                     value={phoneNumber}
                     onChange={e => {
                       setPhoneNumber(e.target.value);
@@ -363,7 +366,7 @@ export const RegisterPage: React.FC = () => {
               <div className="pt-2">
                 <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-3 pb-1 border-b border-slate-100 flex items-center justify-between">
                   <span>Dealership Information</span>
-                  <span className="text-[11px] text-amber-600 font-normal">Pending Admin Verification</span>
+                  <span className="text-[11px] text-slate-600 font-normal">Pending Admin Verification</span>
                 </h3>
 
                 <div className="space-y-4">
@@ -383,7 +386,7 @@ export const RegisterPage: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Input
                       label="Dealer Registration / License #"
-                      placeholder="e.g. DL-CA-2024-9988"
+                      placeholder="e.g. DL-AP-2024-9988"
                       value={registrationNumber}
                       onChange={e => {
                         setRegistrationNumber(e.target.value);
@@ -411,7 +414,7 @@ export const RegisterPage: React.FC = () => {
                   <Input
                     label="Dealership Direct Phone"
                     type="tel"
-                    placeholder="+1 (800) 555-0199"
+                    placeholder="+91 98765 43210"
                     value={dealershipPhone}
                     onChange={e => {
                       setDealershipPhone(e.target.value);
@@ -436,33 +439,13 @@ export const RegisterPage: React.FC = () => {
                   />
 
                   <div className="grid grid-cols-3 gap-3">
-                    <Input
-                      label="City"
-                      placeholder="Los Angeles"
-                      value={city}
-                      onChange={e => {
-                        setCity(e.target.value);
-                        if (errors.city) setErrors(prev => ({ ...prev, city: '' }));
-                      }}
-                      error={errors.city}
-                      required
-                    />
+                    <SelectField name="State" value={state} options={Object.keys(indiaLocations)} onChange={value=>{setState(value);setCity('');}} placeholder="Select state"/>
+
+                    <SelectField name="City" value={city} options={indiaLocations[state]??[]} onChange={setCity} placeholder="Select city"/>
 
                     <Input
-                      label="State"
-                      placeholder="CA"
-                      value={state}
-                      onChange={e => {
-                        setState(e.target.value);
-                        if (errors.state) setErrors(prev => ({ ...prev, state: '' }));
-                      }}
-                      error={errors.state}
-                      required
-                    />
-
-                    <Input
-                      label="PIN / ZIP"
-                      placeholder="90001"
+                      label="PIN code"
+                      placeholder="530016"
                       value={pinCode}
                       onChange={e => {
                         setPinCode(e.target.value);
@@ -488,17 +471,17 @@ export const RegisterPage: React.FC = () => {
           <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
             <span>Already have a registered account?</span>
             <div className="flex items-center gap-3">
-              <Link to="/login" className="font-semibold text-blue-600 hover:text-blue-700">
+              <Link to="/login" className="font-semibold text-slate-600 hover:text-slate-700">
                 Sign In
               </Link>
               <span>•</span>
-              <Link to="/role-selection" className="font-semibold text-blue-600 hover:text-blue-700">
+              <Link to="/role-selection" className="font-semibold text-slate-600 hover:text-slate-700">
                 Explore Roles
               </Link>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </AuthLayout>
   );
 };

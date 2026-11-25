@@ -35,6 +35,7 @@ postgres.createPostgresPool = url => {
   return pool;
 };
 const { PostgresDatabaseAdapter } = require('../dist-electron/src/database/adapters/PostgresDatabaseAdapter');
+const { indiaCatalogue } = require('../dist-electron/src/data/indiaCatalogue');
 const { registerIpcHandlers } = require('../dist-electron/electron/ipcHandlers');
 
 function verifyIpc(adapter) {
@@ -60,6 +61,11 @@ async function verify() {
     try {
       await session.query('BEGIN');
       await session.query(sql.replace(/\bbestbuy\b/g, schema));
+      const india = await readFile(resolve(__dirname, '../src/database/migrations/002_india.sql'), 'utf8');
+      await session.query(india.replace(/\bbestbuy\b/g,schema));
+      const identity = await readFile(resolve(__dirname, '../src/database/migrations/003_marketplace_identity.sql'), 'utf8');
+      await session.query(identity.replace(/\bbestbuy\b/g,schema));
+      for (const car of indiaCatalogue) await session.query(`INSERT INTO ${schema}.india_catalogue(id,details) VALUES ($1,$2)`,[car.id,car]);
       await session.query('COMMIT');
       initialized = true;
       const adminPassword = randomUUID();
@@ -75,7 +81,7 @@ async function verify() {
       const registerDealer = async suffix => good(await adapter.auth.register({
         role:'dealer',name:`Test Dealer ${suffix}`,email:`dealer${suffix}@example.invalid`,phoneNumber:'555-0100',password,
         dealershipName:`Dealer ${suffix}`,registrationNumber:`TEST-${suffix}`,contactPerson:'Test Dealer',
-        dealershipPhone:'555-0101',address:'10 Test Road',city:suffix === 'A' ? 'Los Angeles' : 'los angeles',state:'CA',pinCode:'90001',
+        dealershipPhone:'555-0101',address:'10 Test Road',city:'Visakhapatnam',state:'Andhra Pradesh',pinCode:'530016',
       }), 'Register dealer').user.dealerProfile;
       const buyer = await customer('A');
       const buyer2 = await customer('B');
@@ -157,9 +163,50 @@ async function verify() {
       good(await adminIpc('admin:updateCustomerStatus',buyer.id,'suspended',buyer2.id),'Administrator IPC status change');
       assert.equal((await customerIpc('bookings:getByCustomerId',buyer.id)).success,false);
       good(await adminIpc('admin:updateCustomerStatus',buyer.id,'active',admin),'Administrator IPC reactivation');
+      const date = new Date(Date.now()+3*86400000).toISOString().slice(0,10);
+      assert.equal(good(await adminIpc('india:operation','settings'),'Read default settings'),60);
+      assert.equal(good(await adminIpc('india:operation','setSettings',30),'Update booking window'),30);
+      assert.equal(good(await adminIpc('india:operation','settings'),'Reload booking window'),30);
+      assert.equal((await customerIpc('india:operation','setSettings',45)).success,false);
+      const cars = good(await customerIpc('india:operation','catalogue'),'India catalogue');
+      assert(cars.length >= 75);
+      assert.equal((await customerIpc('india:operation','saveCar',cars[0])).success,false);
+      good(await dealerIpc('india:operation','setSlot',{date,time:'10:00',open:true}),'Open test-drive slot');
+      good(await dealerIpc('india:operation','setSlot',{date,time:'11:00',open:true}),'Open reschedule slot');
+      assert.deepEqual(good(await customerIpc('india:operation','availability',{listingId:second.id,date}),'Read dealership availability'),['10:00','11:00']);
+      const input = {listingId:second.id,date,time:'10:00',name:'Test Customer',mobile:'9876543210',email:buyer.email,contact:'phone'};
+      const requests = await Promise.all([customerIpc('india:operation','request',input),customerIpc('india:operation','request',input)]);
+      assert.equal(requests.filter(item=>item.success).length,1);
+      const drive = requests.find(item=>item.success).data;
+      assert.equal(drive.status,'requested');
+      good(await customerIpc('india:operation','reschedule',{id:drive.id,date,time:'11:00'}),'Reschedule test drive');
+      good(await dealerIpc('india:operation','changeStatus',{id:drive.id,status:'confirmed'}),'Accept test drive');
+      assert.equal((await dealerIpc('india:operation','changeStatus',{id:drive.id,status:'completed'})).success,false);
+      good(await customerIpc('india:operation','changeStatus',{id:drive.id,status:'cancelled'}),'Cancel test drive');
+      assert.equal(good(await adminIpc('india:operation','drives'),'Admin test drive monitoring')[0].history.length,4);
+      good(await adminIpc('india:operation','saveCar',{...cars[0],active:false}),'Deactivate catalogue model');
+      assert.equal(good(await customerIpc('india:operation','catalogue'),'Customer catalogue visibility').length,cars.length-1);
+      const {seedIndia}=require('../dist-electron/src/database/seedIndia');
+      const {issueRecovery}=require('../dist-electron/src/database/passwordRecovery');
+      const verificationPool=postgres.createPostgresPool(connectionString);
+      try {
+        const seedClient=await verificationPool.connect();
+        try {
+          await seedClient.query('BEGIN');
+          const first=await seedIndia(seedClient,'Audit-only seed password');
+          const second=await seedIndia(seedClient,'Audit-only seed password');
+          assert(first.created>0 && second.created===0 && second.skipped===first.created);
+          assert.equal(first.dealers,5);
+          assert.equal(first.customers,4);
+          await seedClient.query('COMMIT');
+        } finally { seedClient.release(); }
+        const recovery=await issueRecovery(verificationPool,buyer.email);
+        assert((await customerIpc('auth:resetPassword',recovery,'Updated audit password')).success);
+        assert(!(await customerIpc('auth:resetPassword',recovery,'Updated audit password')).success);
+      } finally { await verificationPool.end(); }
       await customerIpc('auth:logout');
       assert.equal((await customerIpc('bookings:getByCustomerId',buyer.id)).success,false);
-      console.log('Live PostgreSQL CRUD, concurrent queue and offer operations, pricing locks, notifications, administration, and IPC authorization passed.');
+      console.log('Live PostgreSQL CRUD, concurrent queue and offer operations, pricing locks, notifications, administration, IPC authorization, Indian catalogue management, and concurrent test-drive bookings passed.');
     } catch (error) {
       await session.query('ROLLBACK').catch(()=>undefined);
       throw error;

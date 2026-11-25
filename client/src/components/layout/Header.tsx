@@ -1,3 +1,4 @@
+import { ThemeToggle } from '../ui/ThemeToggle';
 import React, { useState, useEffect } from 'react';
 import {
   Bell,
@@ -10,23 +11,22 @@ import {
   Clock,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-import { desktopAPI, useDemoMode } from '../../services/desktopMode';
+import { desktopAPI } from '../../services/desktopMode';
 import { notificationService } from '../../services/notificationService';
 import { Notification } from '../../types';
 import { getInitials, formatDate } from '../../utils/helpers';
 
 export const Header: React.FC = () => {
   const { user } = useAuthStore();
-  const demo = useDemoMode();
+  const api = desktopAPI();
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
-    if (demo) {
+    if (!api) {
       return notificationService.subscribe(all => setNotifications(all.filter(n => !n.userId || n.userId === user?.id)));
     }
-    const api = desktopAPI();
-    if (!api || !user) return;
+    if (!user) return;
     let active = true;
     const refresh = async () => {
       try {
@@ -39,18 +39,18 @@ export const Header: React.FC = () => {
     void refresh();
     const timer = window.setInterval(refresh, 20_000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [demo, user]);
+  }, [api, user, showNotifications]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   async function markRead(id?: string) {
-    if (demo) {
+    if (!api) {
       if (id) notificationService.markAsRead(id);
       else notificationService.markAllAsRead(user?.id);
       return;
     }
     try {
-      if ((await desktopAPI()?.notifications.markRead(id))?.success) {
+      if ((await api.notifications.markRead(id))?.success) {
         setNotifications(list => list.map(item => !id || item.id === id ? { ...item, isRead:true } : item));
       }
     } catch {
@@ -61,11 +61,11 @@ export const Header: React.FC = () => {
   const getCategoryIcon = (category?: Notification['category']) => {
     switch (category) {
       case 'offer':
-        return <Tag size={14} className="text-emerald-600" />;
+        return <Tag size={14} className="text-slate-600" />;
       case 'booking':
-        return <Calendar size={14} className="text-blue-600" />;
+        return <Calendar size={14} className="text-slate-600" />;
       case 'queue':
-        return <ClipboardList size={14} className="text-amber-600" />;
+        return <ClipboardList size={14} className="text-slate-600" />;
       default:
         return <Info size={14} className="text-slate-500" />;
     }
@@ -73,7 +73,7 @@ export const Header: React.FC = () => {
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
-      <div />
+      <ThemeToggle />
 
       <div className="flex items-center gap-4">
         {/* Notifications Dropdown */}
@@ -85,7 +85,7 @@ export const Header: React.FC = () => {
           >
             <Bell size={20} />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 h-4 w-4 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+              <span className="absolute top-1 right-1 h-4 w-4 bg-slate-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
                 {unreadCount}
               </span>
             )}
@@ -97,7 +97,7 @@ export const Header: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <h4 className="text-sm font-bold text-slate-900">Notifications</h4>
                   {unreadCount > 0 && (
-                    <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
                       {unreadCount} unread
                     </span>
                   )}
@@ -105,7 +105,7 @@ export const Header: React.FC = () => {
                 {unreadCount > 0 && (
                   <button
                     onClick={() => void markRead()}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    className="text-xs text-slate-600 hover:text-slate-800 font-medium"
                   >
                     Mark all read
                   </button>
@@ -123,7 +123,7 @@ export const Header: React.FC = () => {
                       key={n.id}
                       onClick={() => void markRead(n.id)}
                       className={`px-4 py-3 cursor-pointer transition-colors hover:bg-slate-50 ${
-                        !n.isRead ? 'bg-blue-50/40' : ''
+                        !n.isRead ? 'bg-slate-50/40' : ''
                       }`}
                     >
                       <div className="flex items-start gap-3">
@@ -136,7 +136,7 @@ export const Header: React.FC = () => {
                               {n.title}
                             </p>
                             {!n.isRead && (
-                              <span className="h-2 w-2 rounded-full bg-blue-600 flex-shrink-0" />
+                              <span className="h-2 w-2 rounded-full bg-slate-600 flex-shrink-0" />
                             )}
                           </div>
                           <p className="text-xs text-slate-600 mt-0.5 line-clamp-2 leading-relaxed">
@@ -158,7 +158,7 @@ export const Header: React.FC = () => {
 
         {/* Profile */}
         <div className="flex items-center gap-2 cursor-pointer">
-          <div className="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+          <div className="h-8 w-8 bg-slate-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
             {user ? getInitials(user.name) : '?'}
           </div>
           <div className="hidden sm:block text-left">

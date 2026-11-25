@@ -1,14 +1,9 @@
-export function formatCurrency(amount: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+export { formatINR as formatCurrency } from '../../../src/services/indiaFormat';
 
 export function formatDate(dateString: string): string {
-  return new Intl.DateTimeFormat('en-US', {
+  if (!Number.isFinite(Date.parse(dateString))) return '—';
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
     year: 'numeric',
     month: 'short',
     day: 'numeric',

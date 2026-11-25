@@ -1,4 +1,5 @@
-import { demandFixtures } from '../../../src/data/demandFixtures';
+import { indiaDemo } from '../../../src/data/indiaDemo';
+import { hashDemoPassword, verifyDemoPassword } from './demoPasswords';
 import { dealerService, registerMockDealer } from './dealerService';
 import { mockAudit } from './mockAudit';
 import { ApiResponse, User, RegisterData } from '../types';
@@ -16,53 +17,11 @@ export interface LoginCredentials {
 }
 
 // Fallback in-memory demo data for browser dev mode
-const mockBrowserUsers: User[] = [
-  ...demandFixtures().users,
-  {
-    id: 'u1',
-    name: 'Alice Johnson',
-    email: 'customer@demo.com',
-    phoneNumber: '+1 (555) 234-5678',
-    role: 'customer',
-    createdAt: '2024-01-10T08:00:00Z',
-  },
-  {
-    id: 'u2',
-    name: 'Bob Smith',
-    email: 'dealer@demo.com',
-    phoneNumber: '+1 (555) 876-5432',
-    role: 'dealer',
-    createdAt: '2024-01-05T08:00:00Z',
-    dealerProfile: {
-      id: 'd1',
-      userId: 'u2',
-      dealershipName: 'Premier Auto Group',
-      registrationNumber: 'DL-CA-2023-8891',
-      contactPerson: 'Bob Smith',
-      phone: '+1 (310) 555-0100',
-      email: 'premier@autogroup.com',
-      address: '1234 Motor Avenue',
-      city: 'Los Angeles',
-      state: 'CA',
-      pinCode: '90025',
-      status: 'approved',
-      isVerified: true,
-      createdAt: '2024-01-05T08:00:00Z',
-    },
-  },
-  {
-    id: 'u3',
-    name: 'Admin User',
-    email: 'admin@demo.com',
-    phoneNumber: '+1 (555) 000-1122',
-    role: 'admin',
-    createdAt: '2024-01-01T08:00:00Z',
-  },
-];
+const mockBrowserUsers = indiaDemo().users;
 
-const mockPasswords = new Map([
-  ['u1', 'demo1234'], ['u2', 'demo1234'], ['u3', 'demo1234'],
-]);
+let demoPassword: ReturnType<typeof hashDemoPassword> | undefined;
+const demoUsers = new Set(['u1','u2','u3']);
+const mockPasswords = new Map<string, Awaited<ReturnType<typeof hashDemoPassword>>>();
 
 export function isMockAdmin(id: string) {
   return mockBrowserUsers.some(user => user.id === id && user.role === 'admin');
@@ -73,6 +32,11 @@ export function isMockCustomerSuspended(id: string) {
 }
 
 export const authService = {
+  async resetPassword(code:string,password:string):Promise<ApiResponse<unknown>> {
+    const api=getAPI();
+    if(api?.auth?.resetPassword) return api.auth.resetPassword(code,password) as Promise<ApiResponse<unknown>>;
+    return {success:false,error:'Password recovery requires the PostgreSQL application.'};
+  },
   async getUserById(id: string): Promise<ApiResponse<User>> {
     const api = getAPI();
     if (api?.auth?.getUserById) return api.auth.getUserById(id) as Promise<ApiResponse<User>>;
@@ -108,7 +72,10 @@ export const authService = {
     const normalizedEmail = credentials.email.trim().toLowerCase();
     const user = mockBrowserUsers.find(u => u.email.toLowerCase() === normalizedEmail);
 
-    if (user && credentials.password === mockPasswords.get(user.id)) {
+    const stored = user && (demoUsers.has(user.id)
+      ? await (demoPassword ??= hashDemoPassword('demo1234'))
+      : mockPasswords.get(user.id));
+    if (user && await verifyDemoPassword(credentials.password, stored)) {
       const profile = (await this.getUserById(user.id)).data;
       if (profile?.status === 'suspended' || profile?.dealerProfile?.status === 'suspended') {
         return { success: false, error: 'This account is suspended.' };
@@ -145,7 +112,11 @@ export const authService = {
       };
     }
 
-    const newId = `u${Date.now()}`;
+    const passwordHash = await hashDemoPassword(data.password);
+    if (mockBrowserUsers.some(u => u.email.toLowerCase() === normalizedEmail)) {
+      return { success:false,error:'An account with this email address already exists.' };
+    }
+    const newId = crypto.randomUUID();
     const newUser: User = {
       id: newId,
       name: data.name,
@@ -157,7 +128,7 @@ export const authService = {
 
     if (data.role === 'dealer') {
       newUser.dealerProfile = {
-        id: `d${Date.now()}`,
+        id: crypto.randomUUID(),
         userId: newId,
         dealershipName: data.dealershipName,
         registrationNumber: data.registrationNumber,
@@ -176,7 +147,7 @@ export const authService = {
 
     if (newUser.dealerProfile) registerMockDealer(newUser.dealerProfile);
     mockBrowserUsers.push(newUser);
-    mockPasswords.set(newId, data.password);
+    mockPasswords.set(newId, passwordHash);
 
     return {
       success: true,

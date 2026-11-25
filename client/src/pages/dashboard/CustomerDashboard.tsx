@@ -1,6 +1,10 @@
+import { useDemoMode } from '../../services/desktopMode';
+import { VehicleImage } from '../../components/ui/VehicleImage';
+import { isActiveQueue } from '../../../../src/services/adminMetrics';
+import { Modal } from '../../components/ui/Modal';
 import { ListingPriceChange } from '../../components/demand/ListingPriceChange';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Car,
   Search,
@@ -61,6 +65,7 @@ interface CustomerDashboardProps {
 export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab = 'vehicles' }) => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const demo = useDemoMode();
 
   const [activeTab, setActiveTab] = useState<'vehicles' | 'comparison' | 'queues' | 'offers' | 'bookings'>(initialTab);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
@@ -74,6 +79,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
   const [isLoading, setIsLoading] = useState(true);
 
   // Status message
+  const [dataError, setDataError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   // --- 1. Customer Search Fields ---
@@ -86,7 +92,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
   const [selectedColor, setSelectedColor] = useState('all');
   const [selectedCity, setSelectedCity] = useState('all');
   const [pinCodeFilter, setPinCodeFilter] = useState('');
-  const [maxBudget, setMaxBudget] = useState<number>(65000);
+  const [maxBudget, setMaxBudget] = useState<number>(6500000);
 
   // --- Filters & Sorting ---
   const [selectedAvailability, setSelectedAvailability] = useState<string>('all');
@@ -140,9 +146,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
         ]);
 
         if (vRes.success && vRes.data) setVehicles(vRes.data);
-        if (qRes.success && qRes.data) setQueues(qRes.data);
+        if (qRes.success && qRes.data) setQueues(qRes.data.filter(isActiveQueue));
         if (oRes.success && oRes.data) setOffers(oRes.data);
         if (bRes.success && bRes.data) setBookings(bRes.data);
+        const failed = [vRes,qRes,oRes,bRes].find(response => !response.success);
+        setDataError(failed ? failed.error || 'Some marketplace records could not be loaded.' : null);
+      } catch {
+        setDataError('The marketplace could not be loaded.');
       } finally {
         setIsLoading(false);
       }
@@ -172,11 +182,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
           bookingService.getByCustomerId(user.id), queueService.getByCustomerId(user.id),
         ]);
         if (bRes.success && bRes.data) setBookings(bRes.data);
-        if (qRes.success && qRes.data) setQueues(qRes.data);
+        if (qRes.success && qRes.data) setQueues(qRes.data.filter(isActiveQueue));
       }
 
       setActionMessage(
-        `Offer Accepted! Price of $${acceptingOffer.offeredPrice.toLocaleString()} locked for ${lockDurationHours} hours.`
+        `Offer Accepted! Price of ${formatCurrency(acceptingOffer.offeredPrice)} locked for ${lockDurationHours} hours.`
       );
       setTimeout(() => setActionMessage(null), 4000);
     }
@@ -187,6 +197,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
     if (!decliningOffer) return;
     setIsDecliningOffer(true);
 
+    setDataError(null);
     const res = await offerService.declineOffer(decliningOffer.id, declineReason);
     setIsDecliningOffer(false);
     setDecliningOffer(null);
@@ -196,6 +207,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       setOffers(prev => prev.map(o => (o.id === decliningOffer.id ? { ...o, status: 'declined' } : o)));
       setActionMessage('Offer declined. Dealer has been notified.');
       setTimeout(() => setActionMessage(null), 3500);
+    } else {
+      setDataError(res.error || 'The offer could not be declined.');
     }
   };
 
@@ -204,6 +217,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
     if (!cancellingBooking) return;
     setIsCancellingBooking(true);
 
+    setDataError(null);
     const res = await bookingService.updateStatus(cancellingBooking.id, 'cancelled', cancelReason);
     setIsCancellingBooking(false);
     setCancellingBooking(null);
@@ -213,6 +227,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       setBookings(prev => prev.map(b => (b.id === cancellingBooking.id ? res.data! : b)));
       setActionMessage('Booking has been cancelled.');
       setTimeout(() => setActionMessage(null), 3500);
+    } else {
+      setDataError(res.error || 'The booking could not be cancelled.');
     }
   };
 
@@ -229,11 +245,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
   // Handle Leave Queue
   const handleLeaveQueue = async (queueId: string) => {
+    setDataError(null);
     const res = await queueService.leave(queueId);
     if (res.success) {
       setQueues(prev => prev.filter(q => q.id !== queueId));
       setActionMessage('You have left the waitlist queue.');
       setTimeout(() => setActionMessage(null), 3000);
+    } else {
+      setDataError(res.error || 'The queue could not be left.');
     }
   };
 
@@ -305,15 +324,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
   const filteredVehicles = useMemo(() => {
     return vehicles
       .filter(v => {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesQuery =
-          !q ||
-          v.brand.toLowerCase().includes(q) ||
-          v.model.toLowerCase().includes(q) ||
-          v.variant.toLowerCase().includes(q) ||
-          v.color.toLowerCase().includes(q) ||
-          (v.dealer?.dealershipName && v.dealer.dealershipName.toLowerCase().includes(q)) ||
-          (v.dealer?.city && v.dealer.city.toLowerCase().includes(q));
+        const searchTerms = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+        const searchable = [v.brand,v.model,v.variant,v.color,v.dealer?.dealershipName,v.dealer?.city]
+          .filter(Boolean).join(' ').toLowerCase();
+        const matchesQuery = searchTerms.every(term => searchable.includes(term));
 
         const matchesBrand = selectedBrand === 'all' || v.brand === selectedBrand;
         const matchesModel = selectedModel === 'all' || v.model === selectedModel;
@@ -438,7 +452,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
     setSelectedColor('all');
     setSelectedCity('all');
     setPinCodeFilter('');
-    setMaxBudget(65000);
+    setMaxBudget(6500000);
     setSelectedAvailability('all');
     setSelectedDealer('all');
     setSortBy('lowest_price');
@@ -454,7 +468,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
     selectedColor !== 'all' ||
     selectedCity !== 'all' ||
     pinCodeFilter !== '' ||
-    maxBudget < 65000 ||
+    maxBudget < 6500000 ||
     selectedAvailability !== 'all' ||
     selectedDealer !== 'all';
 
@@ -501,6 +515,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
     if (!queueModalVehicle || !user) return;
     setIsJoiningQueue(true);
 
+    setDataError(null);
     const res = await queueService.join({
       customerId: user.id,
       vehicleModelId: queueModalVehicle.vehicleModelId,
@@ -519,6 +534,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
         `Joined waitlist queue for ${queueModalVehicle.brand} ${queueModalVehicle.model}!`
       );
       setTimeout(() => setActionMessage(null), 4000);
+    } else {
+      setDataError(res.error || 'The shared queue could not be joined.');
     }
   };
 
@@ -558,6 +575,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       {/* Top Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[.16em] text-slate-500">Customer workspace</p>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
               Welcome back, {user?.name?.split(' ')[0] || 'Customer'}
@@ -570,7 +588,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
         </div>
 
         {actionMessage && (
-          <div className="px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-lg flex items-center gap-2 animate-fadeIn">
+          <div className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-lg flex items-center gap-2 animate-fadeIn">
             <CheckCircle2 size={14} />
             <span>{actionMessage}</span>
           </div>
@@ -581,7 +599,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card padding="sm" className="border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+            <div className="p-2.5 bg-slate-50 text-slate-600 rounded-xl">
               <Car size={20} />
             </div>
             <div>
@@ -593,7 +611,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
         <Card padding="sm" className="border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+            <div className="p-2.5 bg-slate-50 text-slate-600 rounded-xl">
               <Tag size={20} />
             </div>
             <div>
@@ -607,7 +625,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
         <Card padding="sm" className="border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
+            <div className="p-2.5 bg-slate-50 text-slate-600 rounded-xl">
               <ClipboardList size={20} />
             </div>
             <div>
@@ -621,7 +639,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
         <Card padding="sm" className="border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+            <div className="p-2.5 bg-slate-50 text-slate-600 rounded-xl">
               <Calendar size={20} />
             </div>
             <div>
@@ -634,13 +652,25 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
         </Card>
       </div>
 
+      {dataError && <p role="alert" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-800">{dataError}</p>}
+      {isLoading && <p role="status" className="text-sm text-slate-600">Loading marketplace records…</p>}
+      {demo&&<p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">Demo marketplace · Dealer listings, prices and offers are illustrative.</p>}
+      <section className="space-y-2" aria-label="Recommended cars">
+        <h2 className="font-semibold">Explore Indian models</h2>
+        <div className="flex flex-wrap gap-2">
+          <Link className="btn-secondary" to="/catalogue/tata-motors-nexon">Tata Nexon</Link>
+          <Link className="btn-secondary" to="/catalogue/hyundai-creta">Hyundai Creta</Link>
+          <Link className="btn-secondary" to="/garage">Favourites and recently viewed</Link>
+          <Link className="btn-secondary" to="/test-drives">My test drives</Link>
+        </div>
+      </section>
       {/* Navigation Tabs */}
       <div className="border-b border-slate-200 flex gap-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('vehicles')}
           className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
             activeTab === 'vehicles'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-slate-600 text-slate-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -652,7 +682,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
           onClick={() => setActiveTab('comparison')}
           className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
             activeTab === 'comparison'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-slate-600 text-slate-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -664,7 +694,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
           onClick={() => setActiveTab('offers')}
           className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
             activeTab === 'offers'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-slate-600 text-slate-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -676,7 +706,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
           onClick={() => setActiveTab('bookings')}
           className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
             activeTab === 'bookings'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-slate-600 text-slate-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -688,7 +718,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
           onClick={() => setActiveTab('queues')}
           className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
             activeTab === 'queues'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-slate-600 text-slate-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -700,7 +730,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       {/* ========================================================================= */}
       {/* TAB 1: CUSTOMER DISCOVERY & SEARCH                                        */}
       {/* ========================================================================= */}
-      {activeTab === 'vehicles' && (
+      {!isLoading && activeTab === 'vehicles' && (
         <div className="space-y-5">
           {/* Main Search Panel */}
           <Card padding="md" className="border-slate-200 shadow-sm space-y-4">
@@ -751,7 +781,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     setSelectedModel('all');
                     setSelectedVariant('all');
                   }}
-                  className="w-full text-xs py-2 px-2.5 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs py-2 px-2.5 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
                 >
                   {availableBrands.map(b => (
                     <option key={b} value={b}>
@@ -771,7 +801,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     setSelectedModel(e.target.value);
                     setSelectedVariant('all');
                   }}
-                  className="w-full text-xs py-2 px-2.5 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs py-2 px-2.5 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
                 >
                   {availableModels.map(m => (
                     <option key={m} value={m}>
@@ -788,7 +818,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 <select
                   value={selectedVariant}
                   onChange={e => setSelectedVariant(e.target.value)}
-                  className="w-full text-xs py-2 px-2.5 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs py-2 px-2.5 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
                 >
                   {availableVariants.map(v => (
                     <option key={v} value={v}>
@@ -810,7 +840,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     <select
                       value={selectedFuelType}
                       onChange={e => setSelectedFuelType(e.target.value)}
-                      className="w-full text-xs py-2 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-xs py-2 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
                     >
                       <option value="all">All Fuels</option>
                       <option value="Petrol">Petrol</option>
@@ -828,7 +858,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     <select
                       value={selectedTransmission}
                       onChange={e => setSelectedTransmission(e.target.value)}
-                      className="w-full text-xs py-2 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-xs py-2 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
                     >
                       <option value="all">All Transmissions</option>
                       <option value="Automatic">Automatic</option>
@@ -846,7 +876,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     <select
                       value={selectedColor}
                       onChange={e => setSelectedColor(e.target.value)}
-                      className="w-full text-xs py-2 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-xs py-2 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
                     >
                       <option value="all">All Colours</option>
                       {availableColors.filter(c => c !== 'all').map(c => (
@@ -862,7 +892,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     <select
                       value={selectedCity}
                       onChange={e => setSelectedCity(e.target.value)}
-                      className="w-full text-xs py-2 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-xs py-2 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
                     >
                       <option value="all">All Cities</option>
                       {availableCities.filter(c => c !== 'all').map(c => (
@@ -877,10 +907,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g., 90025"
+                      placeholder="e.g., 530016"
                       value={pinCodeFilter}
                       onChange={e => setPinCodeFilter(e.target.value)}
-                      className="w-full text-xs py-2 px-2.5 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-xs py-2 px-2.5 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
                     />
                   </div>
 
@@ -891,7 +921,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     <select
                       value={selectedDealer}
                       onChange={e => setSelectedDealer(e.target.value)}
-                      className="w-full text-xs py-2 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-xs py-2 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
                     >
                       <option value="all">All Dealerships</option>
                       {availableDealers.map(([id, name]) => (
@@ -904,25 +934,25 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 <div className="p-3 bg-slate-50 rounded-xl space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-slate-700 flex items-center gap-1">
-                      <DollarSign size={13} className="text-blue-600" /> Maximum Budget:
+                      <DollarSign size={13} className="text-slate-600" /> Maximum Budget:
                     </span>
-                    <span className="font-bold text-blue-600 text-sm">
+                    <span className="font-bold text-slate-600 text-sm">
                       {formatCurrency(maxBudget)}
                     </span>
                   </div>
                   <input
                     type="range"
-                    min="25000"
-                    max="65000"
+                    min="400000"
+                    max="6500000"
                     step="1000"
                     value={maxBudget}
                     onChange={e => setMaxBudget(Number(e.target.value))}
-                    className="w-full accent-blue-600 cursor-pointer"
+                    className="w-full accent-slate-600 cursor-pointer"
                   />
                   <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-                    <span>$25,000</span>
-                    <span>$45,000</span>
-                    <span>$65,000+</span>
+                    <span>{formatCurrency(400000)}</span>
+                    <span>{formatCurrency(3000000)}</span>
+                    <span>{formatCurrency(6500000)}+</span>
                   </div>
                 </div>
               </div>
@@ -935,7 +965,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
               <span className="font-bold text-slate-900">{filteredVehicles.length} Vehicles Found</span>
               <span>across matching dealerships</span>
               {hasActiveFilters && (
-                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-[11px] font-semibold">
+                <span className="bg-slate-50 text-slate-700 px-2 py-0.5 rounded-full text-[11px] font-semibold">
                   Filtered
                 </span>
               )}
@@ -947,7 +977,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 <select
                   value={sortBy}
                   onChange={e => setSortBy(e.target.value as any)}
-                  className="text-xs py-1.5 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="text-xs py-1.5 px-2 border border-slate-200 rounded-lg bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-slate-500"
                 >
                   <option value="lowest_price">Lowest Price First</option>
                   <option value="highest_price">Highest Price First</option>
@@ -960,7 +990,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 <button
                   onClick={() => setViewMode('cards')}
                   className={`p-1.5 transition-colors ${
-                    viewMode === 'cards' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                    viewMode === 'cards' ? 'bg-slate-50 text-slate-600' : 'text-slate-400 hover:text-slate-600'
                   }`}
                   title="Card View"
                 >
@@ -969,7 +999,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 <button
                   onClick={() => setViewMode('table')}
                   className={`p-1.5 transition-colors ${
-                    viewMode === 'table' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'
+                    viewMode === 'table' ? 'bg-slate-50 text-slate-600' : 'text-slate-400 hover:text-slate-600'
                   }`}
                   title="Comparison Table View"
                 >
@@ -995,13 +1025,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 </div>
               ) : (
                 filteredVehicles.map(v => {
-                  const peers = vehicles.filter(
-                    item =>
-                      item.brand.toLowerCase() === v.brand.toLowerCase() &&
-                      item.model.toLowerCase() === v.model.toLowerCase() &&
-                      item.variant.toLowerCase() === v.variant.toLowerCase()
-                  );
-                  const lowestPeerPrice = Math.min(...peers.map(p => p.dealerOfferPrice));
+                  const peers = comparisonGroups[`${v.brand} ${v.model} (${v.variant})`] || [v];
+                  const lowestPeerPrice = peers[0].dealerOfferPrice;
                   const isLowestOffer = v.dealerOfferPrice === lowestPeerPrice;
 
                   return (
@@ -1012,7 +1037,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     >
                       <div>
                         <div className="relative aspect-[16/10] bg-slate-100 overflow-hidden">
-                          <img
+                          <VehicleImage
                             src={
                               v.images && v.images[0]
                                 ? v.images[0]
@@ -1026,7 +1051,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                               {v.availability === 'available' ? `In Stock (${v.quantity})` : v.availability.replace('_', ' ')}
                             </Badge>
                             {isLowestOffer && peers.length > 1 && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full shadow-sm">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-600 text-white px-2 py-0.5 rounded-full shadow-sm">
                                 <Award size={10} /> Lowest Dealer Price
                               </span>
                             )}
@@ -1041,11 +1066,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
                         <div className="p-4 space-y-2.5">
                           <div>
-                            <div className="flex items-center justify-between text-[11px] text-blue-600 font-bold uppercase tracking-wider">
+                            <div className="flex items-center justify-between text-[11px] text-slate-600 font-bold uppercase tracking-wider">
                               <span>{v.year} • {v.fuelType}</span>
                               <span className="text-slate-400 font-medium lowercase">{v.transmission}</span>
                             </div>
-                            <h3 className="text-base font-bold text-slate-900 mt-0.5 group-hover:text-blue-600 transition-colors">
+                            <h3 className="text-base font-bold text-slate-900 mt-0.5 group-hover:text-slate-600 transition-colors">
                               {v.brand} {v.model}
                             </h3>
                             <p className="text-xs text-slate-500 font-medium">{v.variant}</p>
@@ -1058,7 +1083,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                                 {v.dealer?.dealershipName}
                               </span>
                               {v.dealer?.isVerified && (
-                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                <span className="text-[10px] font-semibold text-slate-700 bg-slate-50 px-1.5 py-0.2 rounded border border-slate-200">
                                   Verified
                                 </span>
                               )}
@@ -1071,7 +1096,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
                           {peers.length > 1 && (
                             <p className="text-[11px] text-slate-400 flex items-center gap-1 pt-0.5">
-                              <TrendingDown size={12} className="text-blue-600" />
+                              <TrendingDown size={12} className="text-slate-600" />
                               <span>Offered by <strong>{peers.length} dealerships</strong> in region</span>
                             </p>
                           )}
@@ -1142,7 +1167,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                             <span className="font-semibold text-slate-800">{v.dealer?.dealershipName}</span>
                             {v.dealer?.isVerified && (
                               <span title="Verified Dealership" className="inline-flex">
-                                <ShieldCheck size={14} className="text-emerald-600" />
+                                <ShieldCheck size={14} className="text-slate-600" />
                               </span>
                             )}
                           </div>
@@ -1201,15 +1226,15 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       {/* ========================================================================= */}
       {/* TAB 2: MULTI-DEALER PRICE COMPARISON                                      */}
       {/* ========================================================================= */}
-      {activeTab === 'comparison' && (
+      {!isLoading && activeTab === 'comparison' && (
         <div className="space-y-6">
-          <div className="p-4 bg-blue-50/70 border border-blue-100 rounded-xl flex items-start gap-3">
-            <Sparkles size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-xs text-blue-900 leading-relaxed space-y-1">
+          <div className="p-4 bg-slate-50/70 border border-slate-100 rounded-xl flex items-start gap-3">
+            <Sparkles size={20} className="text-slate-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-slate-900 leading-relaxed space-y-1">
               <p>
                 <strong>Multi-Dealer Car Marketplace Comparison:</strong> Independent dealerships provide their own competitive pricing, availability, and delivery timelines for the same vehicle models.
               </p>
-              <p className="text-blue-700">
+              <p className="text-slate-700">
                 You are never forced to choose the cheapest offer. Compare all options freely based on showroom location, dealer verification, stock readiness, or timeline.
               </p>
             </div>
@@ -1229,7 +1254,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     onClick={() => setComparisonModelKey(key)}
                     className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border flex items-center gap-2 ${
                       isSelected
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        ? 'bg-slate-600 text-white border-slate-600 shadow-sm'
                         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
@@ -1249,14 +1274,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
           {activeComparisonListings.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Card padding="sm" className="border-emerald-200 bg-emerald-50/40">
-                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">
+              <Card padding="sm" className="border-slate-200 bg-slate-50/40">
+                <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
                   Lowest Dealer Offer
                 </span>
-                <p className="text-xl font-extrabold text-emerald-700 mt-0.5">
+                <p className="text-xl font-extrabold text-slate-700 mt-0.5">
                   {formatCurrency(lowestGroupPrice)}
                 </p>
-                <span className="text-[11px] text-emerald-600 font-semibold block mt-1">
+                <span className="text-[11px] text-slate-600 font-semibold block mt-1">
                   Save {formatCurrency(highestGroupPrice - lowestGroupPrice)} vs highest
                 </span>
               </Card>
@@ -1277,7 +1302,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   Market Average
                 </span>
-                <p className="text-xl font-extrabold text-blue-600 mt-0.5">
+                <p className="text-xl font-extrabold text-slate-600 mt-0.5">
                   {formatCurrency(avgGroupPrice)}
                 </p>
                 <span className="text-[11px] text-slate-500 block mt-1">
@@ -1340,12 +1365,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                       <tr
                         key={item.id}
                         className={`transition-colors ${
-                          isLowest ? 'bg-emerald-50/30' : 'hover:bg-slate-50'
+                          isLowest ? 'bg-slate-50/30' : 'hover:bg-slate-50'
                         }`}
                       >
                         <td className="px-6 py-4">
                           <div className="flex items-start gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">
+                            <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">
                               <Building2 size={16} />
                             </div>
                             <div>
@@ -1353,11 +1378,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                                 {item.dealer?.dealershipName}
                               </p>
                               {item.dealer?.isVerified ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 mt-0.5">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 bg-slate-50 px-1.5 py-0.2 rounded border border-slate-200 mt-0.5">
                                   <ShieldCheck size={11} /> Verified Dealer
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded mt-0.5 inline-block">
+                                <span className="text-[10px] text-slate-700 bg-slate-50 px-1.5 py-0.2 rounded mt-0.5 inline-block">
                                   Pending Verification
                                 </span>
                               )}
@@ -1387,7 +1412,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
 
                         <td className="px-6 py-4">
                           {isLowest ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200">
                               <Award size={13} /> Cheapest Available
                             </span>
                           ) : (
@@ -1447,7 +1472,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       {/* ========================================================================= */}
       {/* TAB 3: CUSTOMER OFFER MANAGEMENT                                          */}
       {/* ========================================================================= */}
-      {activeTab === 'offers' && (
+      {!isLoading && activeTab === 'offers' && (
         <div className="space-y-4">
           {/* Header & Sub-Filter Pills */}
           <div className="p-5 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1466,7 +1491,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                   onClick={() => setOfferFilter(f)}
                   className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-colors ${
                     offerFilter === f
-                      ? 'bg-blue-600 text-white shadow-xs'
+                      ? 'bg-slate-600 text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -1509,7 +1534,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                               {offer.status === 'pending' && Date.parse(offer.expiryDate) <= Date.now() ? 'EXPIRED' : offer.status.toUpperCase()}
                             </Badge>
                             {exceedsBudget && (
-                              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                              <span className="text-[10px] font-semibold text-slate-700 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200 flex items-center gap-1">
                                 <AlertTriangle size={11} /> Exceeds Filtered Budget
                               </span>
                             )}
@@ -1524,11 +1549,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           <span className="text-xs text-slate-500 block">
                             Listed when sent {formatCurrency(offer.originalPrice)}
                           </span>
-                          <span className="text-2xl font-black text-blue-600 block">
+                          <span className="text-2xl font-black text-slate-600 block">
                             {formatCurrency(offer.offeredPrice)}
                           </span>
                           {discount > 0 && (
-                            <span className="text-[11px] font-bold text-emerald-600">
+                            <span className="text-[11px] font-bold text-slate-600">
                               Save {formatCurrency(discount)}
                             </span>
                           )}
@@ -1549,18 +1574,18 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                       </div>
 
                       {/* Dealership Info Box */}
-                      <div className="p-3 bg-blue-50/50 rounded-xl text-xs space-y-1 mb-3 border border-blue-100">
+                      <div className="p-3 bg-slate-50/50 rounded-xl text-xs space-y-1 mb-3 border border-slate-100">
                         <p className="font-bold text-slate-900 flex items-center gap-1.5">
-                          <Building2 size={13} className="text-blue-600" />
+                          <Building2 size={13} className="text-slate-600" />
                           {offer.dealerName}
                         </p>
                         <p className="text-slate-600">{offer.notes}</p>
                         {offer.terms && (
-                          <p className="text-[11px] text-slate-500 pt-1 border-t border-blue-100 mt-1">
+                          <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 mt-1">
                             <strong>Terms:</strong> {offer.terms}
                           </p>
                         )}
-                        <p className="text-[11px] text-amber-700 font-medium flex items-center gap-1 pt-1">
+                        <p className="text-[11px] text-slate-700 font-medium flex items-center gap-1 pt-1">
                           <Clock size={11} /> Offer valid until {formatDate(offer.expiryDate)}
                         </p>
                       </div>
@@ -1572,7 +1597,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                         size="sm"
                         variant="secondary"
                         onClick={() => handleCompareOfferWithMarket(offer)}
-                        leftIcon={<TrendingDown size={14} className="text-blue-600" />}
+                        leftIcon={<TrendingDown size={14} className="text-slate-600" />}
                       >
                         Compare with Market
                       </Button>
@@ -1598,7 +1623,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                       )}
 
                       {offer.status === 'accepted' && (
-                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                        <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
                           <CheckCircle2 size={14} /> Price Locked & Booking Created
                         </span>
                       )}
@@ -1614,7 +1639,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       {/* ========================================================================= */}
       {/* TAB 4: CUSTOMER BOOKINGS & PRICE LOCK STATUS                               */}
       {/* ========================================================================= */}
-      {activeTab === 'bookings' && (
+      {!isLoading && activeTab === 'bookings' && (
         <div className="space-y-4">
           <div className="p-5 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -1628,7 +1653,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
               <button
                 onClick={() => setBookingFilter('all')}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  bookingFilter === 'all' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  bookingFilter === 'all' ? 'bg-slate-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 All ({bookings.length})
@@ -1636,7 +1661,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
               <button
                 onClick={() => setBookingFilter('active')}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  bookingFilter === 'active' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  bookingFilter === 'active' ? 'bg-slate-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Active Bookings
@@ -1644,7 +1669,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
               <button
                 onClick={() => setBookingFilter('history')}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  bookingFilter === 'history' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  bookingFilter === 'history' ? 'bg-slate-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Booking History
@@ -1666,9 +1691,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     {/* Top Price Lock Strip */}
                     <div className="bg-slate-900 text-white px-5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                       <div className="flex items-center gap-2">
-                        <Lock size={14} className="text-emerald-400" />
+                        <Lock size={14} className="text-slate-400" />
                         <span className="font-semibold text-slate-200">Guaranteed Locked Price:</span>
-                        <span className="text-emerald-400 font-extrabold text-sm">
+                        <span className="text-slate-400 font-extrabold text-sm">
                           {formatCurrency(b.lockedPrice)}
                         </span>
                       </div>
@@ -1679,11 +1704,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                           {formatDate(b.priceLockedUntil)}
                         </span>
                         {isLockActive ? (
-                          <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-bold">
+                          <span className="bg-slate-500/20 text-slate-400 px-2 py-0.5 rounded text-[10px] font-bold">
                             Active Lock
                           </span>
                         ) : (
-                          <span className="bg-red-500/20 text-red-400 px-2 py-0.5 rounded text-[10px] font-bold">
+                          <span className="bg-slate-500/20 text-slate-400 px-2 py-0.5 rounded text-[10px] font-bold">
                             Lock Expired
                           </span>
                         )}
@@ -1710,7 +1735,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                             variant="secondary"
                             size="sm"
                             onClick={() => setCancellingBooking(b)}
-                            className="text-red-600 hover:bg-red-50"
+                            className="text-slate-600 hover:bg-slate-50"
                           >
                             Cancel Booking
                           </Button>
@@ -1741,9 +1766,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                                 key={step.key}
                                 className={`p-2 rounded-lg border font-semibold ${
                                   isCurrent
-                                    ? 'bg-blue-600 text-white border-blue-600'
+                                    ? 'bg-slate-600 text-white border-slate-600'
                                     : isDone
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    ? 'bg-slate-50 text-slate-700 border-slate-200'
                                     : 'bg-white text-slate-400 border-slate-200'
                                 }`}
                               >
@@ -1761,16 +1786,16 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                             Dealership Showroom Contact
                           </span>
                           <p className="font-bold text-slate-900 flex items-center gap-1.5">
-                            <Building2 size={13} className="text-blue-600" />
-                            {b.dealer?.dealershipName || 'Premier Auto Group'}
+                            <Building2 size={13} className="text-slate-600" />
+                            {b.dealer?.dealershipName || 'Coastal Auto Group'}
                           </p>
                           <p className="text-slate-600 flex items-center gap-1.5">
                             <MapPin size={12} className="text-slate-400" />
-                            {b.dealer?.address || '1234 Motor Avenue'}, {b.dealer?.city || 'Los Angeles'}, {b.dealer?.state || 'CA'} ({b.dealer?.pinCode || '90025'})
+                            {b.dealer ? `${b.dealer.address}, ${b.dealer.city}, ${b.dealer.state} (${b.dealer.pinCode})` : 'Dealer address unavailable'}
                           </p>
                           <p className="text-slate-600 flex items-center gap-1.5">
                             <Phone size={12} className="text-slate-400" />
-                            Direct Phone: <a href={`tel:${b.dealer?.phone}`} className="text-blue-600 font-semibold hover:underline">{b.dealer?.phone || '+1 (310) 555-0100'}</a>
+                            Direct Phone: <a href={`tel:${b.dealer?.phone}`} className="text-slate-600 font-semibold hover:underline">{b.dealer?.phone || 'Unavailable'}</a>
                           </p>
                           <p className="text-slate-600 flex items-center gap-1.5">
                             <UserIcon size={12} className="text-slate-400" />
@@ -1806,7 +1831,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       {/* ========================================================================= */}
       {/* TAB 5: ACTIVE QUEUES                                                      */}
       {/* ========================================================================= */}
-      {activeTab === 'queues' && (
+      {!isLoading && activeTab === 'queues' && (
         <Card padding="none">
           <div className="p-5 border-b border-slate-100">
             <CardHeader
@@ -1824,7 +1849,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
               {queues.map(q => (
                 <div key={q.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex flex-col items-center justify-center text-blue-700">
+                    <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center text-slate-700">
                       <span className="text-[10px] font-semibold uppercase">Pos</span>
                       <span className="text-lg font-bold leading-none">#{q.position}</span>
                     </div>
@@ -1872,11 +1897,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
       {/* MODAL: ACCEPT OFFER & LOCK PRICE                                          */}
       {/* ========================================================================= */}
       {acceptingOffer && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 space-y-4">
+        <Modal label="Accept offer and lock price" close={() => !isAcceptingOffer && setAcceptingOffer(null)} wide>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <Lock size={18} className="text-emerald-600" />
+                <Lock size={18} className="text-slate-600" />
                 <h3 className="text-base font-bold text-slate-900">Accept Offer & Lock Price</h3>
               </div>
               <button
@@ -1887,14 +1911,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
               </button>
             </div>
 
-            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
-              <p className="font-bold text-emerald-900">
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+              <p className="font-bold text-slate-900">
                 {acceptingOffer.vehicleName} ({acceptingOffer.variantName})
               </p>
-              <p className="text-emerald-700">
+              <p className="text-slate-700">
                 Dealership: <strong>{acceptingOffer.dealerName}</strong>
               </p>
-              <p className="text-base font-black text-emerald-800 pt-1">
+              <p className="text-base font-black text-slate-800 pt-1">
                 Accepted Price: {formatCurrency(acceptingOffer.offeredPrice)}
               </p>
             </div>
@@ -1912,7 +1936,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                     onClick={() => setLockDurationHours(hrs)}
                     className={`py-2 px-2 text-xs font-semibold rounded-lg border text-center transition-colors ${
                       lockDurationHours === hrs
-                        ? 'bg-blue-600 text-white border-blue-600'
+                        ? 'bg-slate-600 text-white border-slate-600'
                         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
@@ -1943,16 +1967,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 Confirm Price Lock & Book
               </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* ========================================================================= */}
       {/* MODAL: DECLINE OFFER                                                      */}
       {/* ========================================================================= */}
       {decliningOffer && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">
+        <Modal label="Decline offer" close={() => !isDecliningOffer && setDecliningOffer(null)}>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">Decline Dealer Offer</h3>
               <button
@@ -1976,7 +1998,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
               <select
                 value={declineReason}
                 onChange={e => setDeclineReason(e.target.value)}
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
               >
                 <option value="">Select a reason...</option>
                 <option value="Exceeds my budget">Exceeds my budget</option>
@@ -2005,16 +2027,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 Decline Offer
               </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* ========================================================================= */}
       {/* MODAL: CANCEL BOOKING                                                     */}
       {/* ========================================================================= */}
       {cancellingBooking && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">
+        <Modal label="Cancel booking" close={() => !isCancellingBooking && setCancellingBooking(null)}>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">Cancel Booking</h3>
               <button
@@ -2040,7 +2060,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 value={cancelReason}
                 onChange={e => setCancelReason(e.target.value)}
                 placeholder="E.g., Schedule conflict, decided on different model..."
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500"
               />
             </div>
 
@@ -2062,14 +2082,12 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 Confirm Cancellation
               </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* MODAL: DIRECT BOOKING */}
       {bookingVehicle && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 space-y-4">
+        <Modal label="Schedule showroom visit" close={() => !isSubmittingBooking && setBookingVehicle(null)} wide>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
@@ -2088,15 +2106,15 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
             </div>
 
             <form onSubmit={handleConfirmBooking} className="space-y-4">
-              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-xs space-y-1">
+              <div className="p-3 bg-slate-50/70 border border-slate-100 rounded-xl text-xs space-y-1">
                 <p className="font-bold text-slate-800 flex items-center gap-1.5">
-                  <Building2 size={13} className="text-blue-600" />
+                  <Building2 size={13} className="text-slate-600" />
                   {bookingVehicle.dealer?.dealershipName}
                 </p>
                 <p className="text-slate-600">
                   Location: {bookingVehicle.dealer?.address}, {bookingVehicle.dealer?.city} ({bookingVehicle.dealer?.pinCode})
                 </p>
-                <p className="text-blue-700 font-semibold pt-1">
+                <p className="text-slate-700 font-semibold pt-1">
                   Guaranteed Offer: {formatCurrency(bookingVehicle.dealerOfferPrice)} • Timeline: {bookingVehicle.deliveryTimeline}
                 </p>
               </div>
@@ -2118,7 +2136,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                   value={bookingNotes}
                   onChange={e => setBookingNotes(e.target.value)}
                   placeholder="E.g., Test drive requested, financing discussion, vehicle trade-in evaluation..."
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 text-slate-800"
                 />
               </div>
 
@@ -2142,17 +2160,15 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* MODAL: JOIN QUEUE */}
       {queueModalVehicle && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">
+        <Modal label="Join shared queue" close={() => !isJoiningQueue && setQueueModalVehicle(null)}>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <Sparkles size={18} className="text-blue-600" />
+                <Sparkles size={18} className="text-slate-600" />
                 <h3 className="text-base font-bold text-slate-900">Join Shared Waitlist Queue</h3>
               </div>
               <button
@@ -2201,8 +2217,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ initialTab
                 Join Queue
               </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

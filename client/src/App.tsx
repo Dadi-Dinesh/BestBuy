@@ -1,3 +1,8 @@
+import { PasswordRecovery } from './pages/PasswordRecovery';
+import { MarketplaceHome } from './pages/MarketplaceHome';
+import { IndiaCatalogue, IndiaCarDetails } from './pages/india/IndiaCatalogue';
+import { TestDrives } from './pages/india/TestDrives';
+import { CatalogueAdmin } from './pages/india/CatalogueAdmin';
 import React, { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LoadingScreen } from './pages/LoadingScreen';
@@ -74,13 +79,16 @@ function App() {
     <HashRouter>
       <Routes>
         {/* Public authentication and entry routes */}
+        <Route index element={<MarketplaceHome />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<PasswordRecovery />} />
+        <Route path="/reset-password" element={<PasswordRecovery reset />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/role-selection" element={<RoleSelectionPage />} />
 
         {/* Authenticated Application Layout */}
         <Route path="/" element={<RequireAuth><AuthenticatedLayout /></RequireAuth>}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
+
           <Route path="dashboard" element={<RoleDashboard />} />
 
           {/* Customer-only protected routes */}
@@ -88,7 +96,7 @@ function App() {
             path="browse"
             element={
               <RequireAuth allowedRoles={['customer']}>
-                <CustomerDashboard initialTab="vehicles" />
+                <CustomerDashboard key="vehicles" initialTab="vehicles" />
               </RequireAuth>
             }
           />
@@ -96,7 +104,7 @@ function App() {
             path="compare"
             element={
               <RequireAuth allowedRoles={['customer']}>
-                <CustomerDashboard initialTab="comparison" />
+                <CustomerDashboard key="comparison" initialTab="comparison" />
               </RequireAuth>
             }
           />
@@ -112,7 +120,7 @@ function App() {
             path="queue"
             element={
               <RequireAuth allowedRoles={['customer']}>
-                <CustomerDashboard initialTab="queues" />
+                <CustomerDashboard key="queues" initialTab="queues" />
               </RequireAuth>
             }
           />
@@ -120,7 +128,7 @@ function App() {
             path="bookings"
             element={
               <RequireAuth allowedRoles={['customer']}>
-                <CustomerDashboard initialTab="bookings" />
+                <CustomerDashboard key="bookings" initialTab="bookings" />
               </RequireAuth>
             }
           />
@@ -145,6 +153,13 @@ function App() {
 
           {/* Admin-only protected routes */}
           <Route path="admin/*" element={<RequireAuth allowedRoles={['admin']}><AdminDashboard /></RequireAuth>} />
+
+          <Route path="offers" element={<RequireAuth allowedRoles={['customer']}><CustomerDashboard key="offers" initialTab="offers" /></RequireAuth>} />
+          <Route path="catalogue" element={<RequireAuth allowedRoles={['customer']}><IndiaCatalogue /></RequireAuth>} />
+          <Route path="catalogue/:id" element={<RequireAuth allowedRoles={['customer']}><IndiaCarDetails /></RequireAuth>} />
+          <Route path="garage" element={<RequireAuth allowedRoles={['customer']}><IndiaCatalogue garage /></RequireAuth>} />
+          <Route path="test-drives" element={<TestDrives />} />
+          <Route path="admin/catalogue" element={<RequireAuth allowedRoles={['admin']}><CatalogueAdmin /></RequireAuth>} />
 
           {/* Shared authenticated routes */}
           <Route path="settings" element={<SettingsPage />} />

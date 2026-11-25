@@ -1,10 +1,11 @@
+import { indiaDemo } from '../../../src/data/indiaDemo';
+import { formatINR } from '../../../src/services/indiaFormat';
 import { mockDealerCanTrade } from './dealerService';
 import { mockAudit } from './mockAudit';
 import { isMockCustomerSuspended } from './authService';
 import { pricingService } from '../../../src/services/pricingService';
 import { vehicleService } from './vehicleService';
 import { queueService } from './queueService';
-import { demandFixtures } from '../../../src/data/demandFixtures';
 import { ApiResponse, Offer } from '../types';
 import { notificationService } from './notificationService';
 import { bookingService } from './bookingService';
@@ -16,75 +17,7 @@ function getAPI() {
   return null;
 }
 
-let mockOffers: Offer[] = [
-  ...demandFixtures().offers,
-  {
-    id: 'o1',
-    queueEntryId: 'q2',
-    customerId: 'u1',
-    customerName: 'Alice Johnson',
-    dealerId: 'd2',
-    dealerName: 'City Cars Direct',
-    listingId: 'l6',
-    vehicleModelId: 'vm4',
-    vehicleName: 'Tesla Model Y',
-    variantName: 'Long Range AWD',
-    color: 'Stealth Grey',
-    availability: 'In Stock (Allocation #TY-44)',
-    expectedDeliveryDate: new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
-    offeredPrice: 46500,
-    originalPrice: 47990,
-    status: 'pending',
-    expiryDate: new Date(Date.now() + 86400000 * 5).toISOString(),
-    createdAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-    notes: 'Queue priority offer: $1,490 dealer incentive discount.',
-    terms: 'Offer price valid for 5 days. Includes complimentary ceramic paint coating and 1st year mobile charger.',
-  },
-  {
-    id: 'o2',
-    queueEntryId: 'q1',
-    customerId: 'u1',
-    customerName: 'Alice Johnson',
-    dealerId: 'd1',
-    dealerName: 'Premier Auto Group',
-    listingId: 'l2',
-    vehicleModelId: 'vm1',
-    vehicleName: 'Toyota Camry',
-    variantName: 'XSE Hybrid',
-    color: 'Wind Chill Pearl',
-    availability: 'In Stock (2 units)',
-    expectedDeliveryDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
-    offeredPrice: 33900,
-    originalPrice: 34850,
-    status: 'pending',
-    expiryDate: new Date(Date.now() + 86400000 * 4).toISOString(),
-    createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
-    notes: 'Exclusive queue match pricing with immediate showroom delivery.',
-    terms: 'Price includes destination fee and 2 years complimentary factory scheduled maintenance.',
-  },
-  {
-    id: 'o3',
-    queueEntryId: 'q3',
-    customerId: 'u6',
-    customerName: 'David Miller',
-    dealerId: 'd1',
-    dealerName: 'Premier Auto Group',
-    listingId: 'l1',
-    vehicleModelId: 'vm1',
-    vehicleName: 'Toyota Camry',
-    variantName: 'LE',
-    color: 'Midnight Black Metallic',
-    availability: 'In Stock (4 units)',
-    expectedDeliveryDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-    offeredPrice: 27950,
-    originalPrice: 28400,
-    status: 'accepted',
-    expiryDate: new Date(Date.now() + 86400000 * 3).toISOString(),
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    notes: 'Fast-track test drive & delivery bundle.',
-    terms: 'Price locked under BestBuy multi-dealer guarantee.',
-  },
-];
+let mockOffers = indiaDemo().offers;
 
 export function expireMockListingOffers(listingId: string) {
   for (const offer of mockOffers) {
@@ -142,7 +75,7 @@ export const offerService = {
     notificationService.add({
       userId: newOffer.customerId,
       title: 'New Dealer Offer Received!',
-      message: `${newOffer.dealerName || 'A dealership'} sent you an offer of $${newOffer.offeredPrice.toLocaleString()} for the ${newOffer.vehicleName} (${newOffer.variantName}).`,
+      message: `${newOffer.dealerName || 'A dealership'} sent you an offer of ${formatINR(newOffer.offeredPrice)} for the ${newOffer.vehicleName} (${newOffer.variantName}).`,
       type: 'success',
       category: 'offer',
       linkTo: '/dashboard',
@@ -193,7 +126,7 @@ export const offerService = {
     notificationService.add({
       userId: offer.dealerId,
       title: 'Offer Accepted! Price Locked',
-      message: `${offer.customerName || 'Customer'} accepted your offer of $${offer.offeredPrice.toLocaleString()} for ${offer.vehicleName}. Price is locked for ${lockDurationHours} hours.`,
+      message: `${offer.customerName || 'Customer'} accepted your offer of ${formatINR(offer.offeredPrice)} for ${offer.vehicleName}. Price is locked for ${lockDurationHours} hours.`,
       type: 'success',
       category: 'booking',
       linkTo: '/inventory',
@@ -203,7 +136,7 @@ export const offerService = {
     notificationService.add({
       userId: offer.customerId,
       title: 'Offer Accepted & Price Locked!',
-      message: `Your accepted price of $${offer.offeredPrice.toLocaleString()} with ${offer.dealerName} is locked for ${lockDurationHours} hours. Booking is Pending Confirmation.`,
+      message: `Your accepted price of ${formatINR(offer.offeredPrice)} with ${offer.dealerName} is locked for ${lockDurationHours} hours. Booking is Pending Confirmation.`,
       type: 'info',
       category: 'booking',
       linkTo: '/bookings',
@@ -226,7 +159,7 @@ export const offerService = {
     notificationService.add({
       userId: offer.dealerId,
       title: 'Offer Declined',
-      message: `Customer ${offer.customerName || ''} declined your offer of $${offer.offeredPrice.toLocaleString()} on ${offer.vehicleName}${reason ? `: "${reason}"` : '.'}`,
+      message: `Customer ${offer.customerName || ''} declined your offer of ${formatINR(offer.offeredPrice)} on ${offer.vehicleName}${reason ? `: "${reason}"` : '.'}`,
       type: 'warning',
       category: 'offer',
       linkTo: '/inventory',

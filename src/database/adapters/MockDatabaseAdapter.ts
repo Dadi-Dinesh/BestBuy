@@ -1,11 +1,17 @@
+import { indiaDemo } from '../../data/indiaDemo';
+import { randomUUID } from 'node:crypto';
+import { hashPassword, verifyPassword } from '../passwords';
+import { authInput, signup, isIndianLocation } from '../validation';
+import { canChangeBooking } from '../../services/bookingTransitions';
+import { queueAllocation } from '../../services/queueAllocation';
 import { createAuditLog, recordPriceUpdate } from '../../services/auditLog';
 import { adminMetrics } from '../../services/adminMetrics';
 import { resolveVehicleIdentity } from '../../services/vehicleIdentity';
-import { demandFixtures } from '../../data/demandFixtures';
 import { pricingService, type ListingPriceChange } from '../../services/pricingService';
 import { IDatabaseAdapter, AdminStats } from '../IDatabaseAdapter';
 import {
   User,
+  Notification,
   Dealer,
   VehicleListing,
   VehicleModel,
@@ -35,810 +41,27 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     return this._users.some(user => user.id === id && user.status === 'suspended');
   }
 
-  private _users: User[] = [
-    ...demandFixtures().users,
-    {
-      id: 'u1',
-      name: 'Alice Johnson',
-      email: 'customer@demo.com',
-      phoneNumber: '+1 (555) 234-5678',
-      role: 'customer',
-      createdAt: '2024-01-10T08:00:00Z',
-    },
-    {
-      id: 'u2',
-      name: 'Bob Smith',
-      email: 'dealer@demo.com',
-      phoneNumber: '+1 (555) 876-5432',
-      role: 'dealer',
-      createdAt: '2024-01-05T08:00:00Z',
-    },
-    {
-      id: 'u3',
-      name: 'Admin User',
-      email: 'admin@demo.com',
-      phoneNumber: '+1 (555) 000-1122',
-      role: 'admin',
-      createdAt: '2024-01-01T08:00:00Z',
-    },
-    {
-      id: 'u4',
-      name: 'Marcus Vance',
-      email: 'marcus@citycars.com',
-      phoneNumber: '+1 (555) 998-7711',
-      role: 'dealer',
-      createdAt: '2024-01-15T09:30:00Z',
-    },
-    {
-      id: 'u5',
-      name: 'Elena Rostova',
-      email: 'elena@apexmotors.com',
-      phoneNumber: '+1 (555) 443-2211',
-      role: 'dealer',
-      createdAt: '2024-02-01T11:00:00Z',
-    },
-  ];
-
-  private _passwords: Record<string, string> = {
-    'customer@demo.com': 'demo1234',
-    'dealer@demo.com': 'demo1234',
-    'admin@demo.com': 'demo1234',
-    'marcus@citycars.com': 'demo1234',
-    'elena@apexmotors.com': 'demo1234',
-  };
-
-  private _dealers: Dealer[] = [
-    {
-      id: 'd1',
-      userId: 'u2',
-      dealershipName: 'Premier Auto Group',
-      registrationNumber: 'DL-CA-2023-8891',
-      contactPerson: 'Bob Smith',
-      phone: '+1 (310) 555-0100',
-      email: 'premier@autogroup.com',
-      address: '1234 Motor Avenue',
-      city: 'Los Angeles',
-      state: 'CA',
-      pinCode: '90025',
-      status: 'approved',
-      isVerified: true,
-      createdAt: '2024-01-05T08:00:00Z',
-    },
-    {
-      id: 'd2',
-      userId: 'u4',
-      dealershipName: 'City Cars Direct',
-      registrationNumber: 'DL-CA-2022-4412',
-      contactPerson: 'Marcus Vance',
-      phone: '+1 (415) 555-0200',
-      email: 'info@citycars.com',
-      address: '567 Dealership Boulevard',
-      city: 'San Francisco',
-      state: 'CA',
-      pinCode: '94103',
-      status: 'approved',
-      isVerified: true,
-      createdAt: '2024-01-07T08:00:00Z',
-    },
-    {
-      id: 'd3',
-      userId: 'u6',
-      dealershipName: 'Pacific Horizon Motors',
-      registrationNumber: 'DL-CA-2023-5582',
-      contactPerson: 'David Chen',
-      phone: '+1 (619) 555-0350',
-      email: 'sales@pacifichorizon.com',
-      address: '789 Harbor Drive',
-      city: 'San Diego',
-      state: 'CA',
-      pinCode: '92101',
-      status: 'approved',
-      isVerified: true,
-      createdAt: '2024-01-12T08:00:00Z',
-    },
-    {
-      id: 'd4',
-      userId: 'u7',
-      dealershipName: 'Bay Area Prestige Autos',
-      registrationNumber: 'DL-CA-2023-7719',
-      contactPerson: 'Sarah Jenkins',
-      phone: '+1 (408) 555-0420',
-      email: 'contact@prestigeautos.com',
-      address: '450 Silicon Valley Expressway',
-      city: 'San Jose',
-      state: 'CA',
-      pinCode: '95113',
-      status: 'approved',
-      isVerified: true,
-      createdAt: '2024-01-15T08:00:00Z',
-    },
-    {
-      id: 'd5',
-      userId: 'u5',
-      dealershipName: 'Apex Motorworks',
-      registrationNumber: 'DL-NV-2024-1109',
-      contactPerson: 'Elena Rostova',
-      phone: '+1 (702) 555-7788',
-      email: 'elena@apexmotors.com',
-      address: '890 Sahara Avenue',
-      city: 'Las Vegas',
-      state: 'NV',
-      pinCode: '89104',
-      status: 'pending',
-      isVerified: false,
-      createdAt: '2024-02-01T11:00:00Z',
-    },
-  ];
-
-  private _vehicleModels: VehicleModel[] = [
-    {
-      id: 'vm1',
-      make: 'Toyota',
-      model: 'Camry',
-      year: 2024,
-      category: 'Sedan',
-      variants: [
-        {
-          id: 'vv1',
-          name: 'LE',
-          trimLevel: 'Base',
-          engineType: '2.5L 4-Cylinder',
-          transmission: 'Automatic',
-          fuelType: 'Petrol',
-          seatingCapacity: 5,
-          features: ['Apple CarPlay', 'Toyota Safety Sense 2.5+', 'Backup Camera', 'Dual-Zone Climate'],
-        },
-        {
-          id: 'vv2',
-          name: 'XSE Hybrid',
-          trimLevel: 'Sport Premium',
-          engineType: '2.5L 4-Cylinder Hybrid',
-          transmission: 'CVT',
-          fuelType: 'Hybrid',
-          seatingCapacity: 5,
-          features: ['JBL 9-Speaker Audio', 'Heated Leather Seats', 'Panoramic Glass Roof', 'Head-Up Display'],
-        },
-      ],
-    },
-    {
-      id: 'vm2',
-      make: 'Honda',
-      model: 'Accord',
-      year: 2024,
-      category: 'Sedan',
-      variants: [
-        {
-          id: 'vv3',
-          name: 'Sport',
-          trimLevel: 'Sport',
-          engineType: '1.5L Turbocharged VTEC',
-          transmission: 'CVT',
-          fuelType: 'Petrol',
-          seatingCapacity: 5,
-          features: ['Honda Sensing', '12.3-inch Touchscreen', 'Wireless Apple CarPlay', '19-inch Alloy Wheels'],
-        },
-      ],
-    },
-    {
-      id: 'vm3',
-      make: 'Ford',
-      model: 'F-150',
-      year: 2024,
-      category: 'Truck',
-      variants: [
-        {
-          id: 'vv4',
-          name: 'XLT SuperCrew',
-          trimLevel: 'Mid-Level',
-          engineType: '3.5L EcoBoost V6',
-          transmission: 'Automatic',
-          fuelType: 'Petrol',
-          seatingCapacity: 6,
-          features: ['SYNC 4 with 12-inch Display', 'Pro Power Onboard 2.4kW', 'Co-Pilot360 2.0', 'Tow Package'],
-        },
-      ],
-    },
-    {
-      id: 'vm4',
-      make: 'Tesla',
-      model: 'Model Y',
-      year: 2024,
-      category: 'Electric SUV',
-      variants: [
-        {
-          id: 'vv5',
-          name: 'Long Range AWD',
-          trimLevel: 'Long Range',
-          engineType: 'Dual Motor Electric',
-          transmission: 'Single-Speed',
-          fuelType: 'Electric',
-          seatingCapacity: 5,
-          features: ['Autopilot', 'All-Glass Roof', 'Premium Audio', '310 Mile Range', 'Heated All Seats'],
-        },
-      ],
-    },
-    {
-      id: 'vm5',
-      make: 'BMW',
-      model: '3 Series',
-      year: 2024,
-      category: 'Luxury Sedan',
-      variants: [
-        {
-          id: 'vv6',
-          name: '330i xDrive',
-          trimLevel: 'M Sport Package',
-          engineType: '2.0L TwinPower Turbo',
-          transmission: 'Automatic',
-          fuelType: 'Petrol',
-          seatingCapacity: 5,
-          features: ['BMW Curved Display', 'Live Cockpit Pro', 'Adaptive M Suspension', 'Harman Kardon'],
-        },
-      ],
-    },
-  ];
-
-  // Multi-dealer independent listings
-  private _listings: VehicleListing[] = [
-    {
-      id: 'l1',
-      dealerId: 'd1', // Premier Auto Group
-      vehicleModelId: 'vm1',
-      variantId: 'vv1',
-      brand: 'Toyota',
-      model: 'Camry',
-      variant: 'LE',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'Automatic',
-      color: 'Midnight Black Metallic',
-      mileage: 12,
-      condition: 'new',
-      price: 28400,
-      exShowroomPrice: 26320,
-      onRoadPrice: 29800,
-      dealerOfferPrice: 28400,
-      quantity: 4,
-      deliveryTimeline: 'Immediate',
-      availability: 'available',
-      description: 'Brand new 2024 Toyota Camry LE. Immediate delivery from Los Angeles showroom with complimentary first service.',
-      images: ['https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-01T08:00:00Z',
-      updatedAt: '2024-02-01T08:00:00Z',
-    },
-    {
-      id: 'l2',
-      dealerId: 'd1', // Premier Auto Group
-      vehicleModelId: 'vm1',
-      variantId: 'vv2',
-      brand: 'Toyota',
-      model: 'Camry',
-      variant: 'XSE Hybrid',
-      year: 2024,
-      fuelType: 'Hybrid',
-      transmission: 'CVT',
-      color: 'Wind Chill Pearl',
-      mileage: 8,
-      condition: 'new',
-      price: 34850,
-      exShowroomPrice: 32900,
-      onRoadPrice: 36500,
-      dealerOfferPrice: 34850,
-      quantity: 2,
-      deliveryTimeline: 'Within 7 days',
-      availability: 'available',
-      description: 'Toyota Camry XSE Hybrid. Exceptional 47 MPG combined. Fully optioned with JBL audio and panoramic roof.',
-      images: ['https://images.unsplash.com/photo-1619767886558-efdc259cde1a?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-01T08:00:00Z',
-      updatedAt: '2024-02-01T08:00:00Z',
-    },
-    {
-      id: 'l3',
-      dealerId: 'd2', // City Cars Direct (SAME model as l1, but different price, delivery timeline & quantity!)
-      vehicleModelId: 'vm1',
-      variantId: 'vv1',
-      brand: 'Toyota',
-      model: 'Camry',
-      variant: 'LE',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'Automatic',
-      color: 'Celestial Silver Metallic',
-      mileage: 15,
-      condition: 'new',
-      price: 27900, // City Cars is cheaper than Premier ($27,900 vs $28,400)
-      exShowroomPrice: 26320,
-      onRoadPrice: 29200,
-      dealerOfferPrice: 27900,
-      quantity: 1,
-      deliveryTimeline: 'Within 7 days',
-      availability: 'available',
-      description: 'City Cars Direct competitive price match! Ready for customer test drive at our San Francisco showroom.',
-      images: ['https://images.unsplash.com/photo-1590362891988-f77804702e0a?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-02T08:00:00Z',
-      updatedAt: '2024-02-02T08:00:00Z',
-    },
-    {
-      id: 'l4',
-      dealerId: 'd2', // City Cars Direct
-      vehicleModelId: 'vm2',
-      variantId: 'vv3',
-      brand: 'Honda',
-      model: 'Accord',
-      variant: 'Sport',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'CVT',
-      color: 'Sonic Gray Pearl',
-      mileage: 5,
-      condition: 'new',
-      price: 31500,
-      exShowroomPrice: 29800,
-      onRoadPrice: 33100,
-      dealerOfferPrice: 31500,
-      quantity: 3,
-      deliveryTimeline: 'Immediate',
-      availability: 'available',
-      description: 'Honda Accord Sport with wireless Apple CarPlay, 19-inch sport alloys and Honda Sensing driver assist.',
-      images: ['https://images.unsplash.com/photo-1592853625597-7d17be820d0c?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-03T08:00:00Z',
-      updatedAt: '2024-02-03T08:00:00Z',
-    },
-    {
-      id: 'l5',
-      dealerId: 'd1', // Premier Auto Group
-      vehicleModelId: 'vm3',
-      variantId: 'vv4',
-      brand: 'Ford',
-      model: 'F-150',
-      variant: 'XLT SuperCrew',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'Automatic',
-      color: 'Atlas Blue Metallic',
-      mileage: 22,
-      condition: 'new',
-      price: 52400,
-      exShowroomPrice: 49500,
-      onRoadPrice: 55000,
-      dealerOfferPrice: 52400,
-      quantity: 2,
-      deliveryTimeline: 'Within 15 days',
-      availability: 'reserved',
-      description: 'Ford F-150 SuperCrew with 3.5L EcoBoost, max trailering package and 2.4kW Pro Power Onboard.',
-      images: ['https://images.unsplash.com/photo-1583121274602-3e2820c69888?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-04T08:00:00Z',
-      updatedAt: '2024-02-04T08:00:00Z',
-    },
-    {
-      id: 'l6',
-      dealerId: 'd2', // City Cars Direct
-      vehicleModelId: 'vm4',
-      variantId: 'vv5',
-      brand: 'Tesla',
-      model: 'Model Y',
-      variant: 'Long Range AWD',
-      year: 2024,
-      fuelType: 'Electric',
-      transmission: 'Single-Speed',
-      color: 'Stealth Grey',
-      mileage: 0,
-      condition: 'new',
-      price: 47990,
-      exShowroomPrice: 47990,
-      onRoadPrice: 51200,
-      dealerOfferPrice: 47990,
-      quantity: 0,
-      deliveryTimeline: 'Within 30 days',
-      availability: 'out_of_stock',
-      description: '2024 Tesla Model Y Long Range AWD. 310 miles EPA range with Autopilot and all-glass roof.',
-      images: ['https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-05T09:00:00Z',
-      updatedAt: '2024-02-05T09:00:00Z',
-    },
-    {
-      id: 'l7',
-      dealerId: 'd3', // Pacific Horizon Motors
-      vehicleModelId: 'vm1',
-      variantId: 'vv1',
-      brand: 'Toyota',
-      model: 'Camry',
-      variant: 'LE',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'Automatic',
-      color: 'Supersonic Red',
-      mileage: 6,
-      condition: 'new',
-      price: 28150,
-      exShowroomPrice: 26320,
-      onRoadPrice: 29500,
-      dealerOfferPrice: 28150,
-      quantity: 3,
-      deliveryTimeline: 'Immediate',
-      availability: 'available',
-      description: 'San Diego showroom special. Supersonic Red Camry LE with all-weather package and tint.',
-      images: ['https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-06T08:00:00Z',
-      updatedAt: '2024-02-06T08:00:00Z',
-    },
-    {
-      id: 'l8',
-      dealerId: 'd4', // Bay Area Prestige Autos
-      vehicleModelId: 'vm1',
-      variantId: 'vv1',
-      brand: 'Toyota',
-      model: 'Camry',
-      variant: 'LE',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'Automatic',
-      color: 'Midnight Black Metallic',
-      mileage: 18,
-      condition: 'new',
-      price: 28700,
-      exShowroomPrice: 26320,
-      onRoadPrice: 30100,
-      dealerOfferPrice: 28700,
-      quantity: 2,
-      deliveryTimeline: 'Within 15 days',
-      availability: 'available',
-      description: 'Silicon Valley certified dealer allocation. Full pre-delivery prep included.',
-      images: ['https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-07T08:00:00Z',
-      updatedAt: '2024-02-07T08:00:00Z',
-    },
-    {
-      id: 'l9',
-      dealerId: 'd3', // Pacific Horizon Motors
-      vehicleModelId: 'vm1',
-      variantId: 'vv2',
-      brand: 'Toyota',
-      model: 'Camry',
-      variant: 'XSE Hybrid',
-      year: 2024,
-      fuelType: 'Hybrid',
-      transmission: 'CVT',
-      color: 'Celestial Silver',
-      mileage: 10,
-      condition: 'new',
-      price: 34200,
-      exShowroomPrice: 32900,
-      onRoadPrice: 35900,
-      dealerOfferPrice: 34200,
-      quantity: 1,
-      deliveryTimeline: 'Immediate',
-      availability: 'available',
-      description: 'Special dealer promotion: $650 below regional MSRP for immediate delivery in San Diego.',
-      images: ['https://images.unsplash.com/photo-1619767886558-efdc259cde1a?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-08T08:00:00Z',
-      updatedAt: '2024-02-08T08:00:00Z',
-    },
-    {
-      id: 'l10',
-      dealerId: 'd1', // Premier Auto Group
-      vehicleModelId: 'vm2',
-      variantId: 'vv3',
-      brand: 'Honda',
-      model: 'Accord',
-      variant: 'Sport',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'CVT',
-      color: 'Platinum White Pearl',
-      mileage: 14,
-      condition: 'new',
-      price: 31900,
-      exShowroomPrice: 29800,
-      onRoadPrice: 33400,
-      dealerOfferPrice: 31900,
-      quantity: 2,
-      deliveryTimeline: 'Within 7 days',
-      availability: 'available',
-      description: 'Premier Auto Group Los Angeles inventory with premium paint protection and floor mats.',
-      images: ['https://images.unsplash.com/photo-1592853625597-7d17be820d0c?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-09T08:00:00Z',
-      updatedAt: '2024-02-09T08:00:00Z',
-    },
-    {
-      id: 'l11',
-      dealerId: 'd4', // Bay Area Prestige Autos
-      vehicleModelId: 'vm2',
-      variantId: 'vv3',
-      brand: 'Honda',
-      model: 'Accord',
-      variant: 'Sport',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'CVT',
-      color: 'Meteorite Gray Metallic',
-      mileage: 4,
-      condition: 'new',
-      price: 31200,
-      exShowroomPrice: 29800,
-      onRoadPrice: 32800,
-      dealerOfferPrice: 31200,
-      quantity: 4,
-      deliveryTimeline: 'Within 15 days',
-      availability: 'available',
-      description: 'Lowest price in Northern California. Volume dealer discount applied.',
-      images: ['https://images.unsplash.com/photo-1592853625597-7d17be820d0c?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-10T08:00:00Z',
-      updatedAt: '2024-02-10T08:00:00Z',
-    },
-    {
-      id: 'l12',
-      dealerId: 'd1', // Premier Auto Group
-      vehicleModelId: 'vm4',
-      variantId: 'vv5',
-      brand: 'Tesla',
-      model: 'Model Y',
-      variant: 'Long Range AWD',
-      year: 2024,
-      fuelType: 'Electric',
-      transmission: 'Single-Speed',
-      color: 'Pearl White Multi-Coat',
-      mileage: 15,
-      condition: 'new',
-      price: 48490,
-      exShowroomPrice: 47990,
-      onRoadPrice: 51800,
-      dealerOfferPrice: 48490,
-      quantity: 2,
-      deliveryTimeline: 'Within 7 days',
-      availability: 'available',
-      description: 'In-transit allocation arriving in Los Angeles showroom within 7 days. 20-inch Induction wheels.',
-      images: ['https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-11T08:00:00Z',
-      updatedAt: '2024-02-11T08:00:00Z',
-    },
-    {
-      id: 'l13',
-      dealerId: 'd3', // Pacific Horizon Motors
-      vehicleModelId: 'vm4',
-      variantId: 'vv5',
-      brand: 'Tesla',
-      model: 'Model Y',
-      variant: 'Long Range AWD',
-      year: 2024,
-      fuelType: 'Electric',
-      transmission: 'Single-Speed',
-      color: 'Deep Blue Metallic',
-      mileage: 8,
-      condition: 'new',
-      price: 47490,
-      exShowroomPrice: 47990,
-      onRoadPrice: 50700,
-      dealerOfferPrice: 47490,
-      quantity: 1,
-      deliveryTimeline: 'Within 15 days',
-      availability: 'available',
-      description: 'Competitive electric incentive discount. Clean vehicle tax rebate eligible.',
-      images: ['https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-12T08:00:00Z',
-      updatedAt: '2024-02-12T08:00:00Z',
-    },
-    {
-      id: 'l14',
-      dealerId: 'd4', // Bay Area Prestige Autos
-      vehicleModelId: 'vm5',
-      variantId: 'vv6',
-      brand: 'BMW',
-      model: '3 Series',
-      variant: '330i xDrive',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'Automatic',
-      color: 'Portimao Blue Metallic',
-      mileage: 11,
-      condition: 'new',
-      price: 45800,
-      exShowroomPrice: 44500,
-      onRoadPrice: 48900,
-      dealerOfferPrice: 45800,
-      quantity: 2,
-      deliveryTimeline: 'Immediate',
-      availability: 'available',
-      description: 'BMW 330i xDrive with M Sport Package and Shadowline trim. Ready for immediate delivery.',
-      images: ['https://images.unsplash.com/photo-1555215695-3004980ad54e?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-13T08:00:00Z',
-      updatedAt: '2024-02-13T08:00:00Z',
-    },
-    {
-      id: 'l15',
-      dealerId: 'd1', // Premier Auto Group
-      vehicleModelId: 'vm5',
-      variantId: 'vv6',
-      brand: 'BMW',
-      model: '3 Series',
-      variant: '330i xDrive',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'Automatic',
-      color: 'Alpine White',
-      mileage: 5,
-      condition: 'new',
-      price: 46500,
-      exShowroomPrice: 44500,
-      onRoadPrice: 49500,
-      dealerOfferPrice: 46500,
-      quantity: 1,
-      deliveryTimeline: 'Within 7 days',
-      availability: 'available',
-      description: 'Alpine White with Tacora Red Vernasca Leather. Includes Premium Package.',
-      images: ['https://images.unsplash.com/photo-1555215695-3004980ad54e?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-14T08:00:00Z',
-      updatedAt: '2024-02-14T08:00:00Z',
-    },
-    {
-      id: 'l16',
-      dealerId: 'd2', // City Cars Direct
-      vehicleModelId: 'vm3',
-      variantId: 'vv4',
-      brand: 'Ford',
-      model: 'F-150',
-      variant: 'XLT SuperCrew',
-      year: 2024,
-      fuelType: 'Petrol',
-      transmission: 'Automatic',
-      color: 'Carbonized Gray',
-      mileage: 19,
-      condition: 'new',
-      price: 51800,
-      exShowroomPrice: 49500,
-      onRoadPrice: 54400,
-      dealerOfferPrice: 51800,
-      quantity: 1,
-      deliveryTimeline: 'Within 7 days',
-      availability: 'available',
-      description: 'City Cars Direct discount price. Includes 302A luxury package and trailer tow.',
-      images: ['https://images.unsplash.com/photo-1583121274602-3e2820c69888?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-15T08:00:00Z',
-      updatedAt: '2024-02-15T08:00:00Z',
-    },
-    {
-      id: 'l17',
-      dealerId: 'd5', // Apex Motorworks
-      vehicleModelId: 'vm4',
-      variantId: 'vv5',
-      brand: 'Tesla',
-      model: 'Model Y',
-      variant: 'Long Range AWD',
-      year: 2024,
-      fuelType: 'Electric',
-      transmission: 'Single-Speed',
-      color: 'Solid Black',
-      mileage: 2,
-      condition: 'new',
-      price: 47200,
-      exShowroomPrice: 47990,
-      onRoadPrice: 50400,
-      dealerOfferPrice: 47200,
-      quantity: 2,
-      deliveryTimeline: 'Within 7 days',
-      availability: 'available',
-      description: 'Apex Motorworks exclusive price. Verification in progress with BestBuy platform.',
-      images: ['https://images.unsplash.com/photo-1560958089-b8a1929cea89?auto=format&fit=crop&w=800&q=80'],
-      createdAt: '2024-02-16T08:00:00Z',
-      updatedAt: '2024-02-16T08:00:00Z',
-    },
-  ];
-
-  private _queues: QueueEntry[] = [
-    ...demandFixtures().queues,
-    {
-      id: 'q1',
-      city: 'Los Angeles',
-      vehicleModelId: 'vm1',
-      variantId: 'vv2',
-      customerId: 'u1',
-      customerName: 'Alice Johnson',
-      customerPhone: '+1 (555) 234-5678',
-      position: 2,
-      status: 'waiting',
-      createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
-    },
-    {
-      id: 'q2',
-      city: 'San Francisco',
-      vehicleModelId: 'vm4',
-      variantId: 'vv5',
-      customerId: 'u1',
-      customerName: 'Alice Johnson',
-      customerPhone: '+1 (555) 234-5678',
-      position: 1,
-      status: 'offered',
-      createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-    },
-    {
-      id: 'q3',
-      city: 'Los Angeles',
-      vehicleModelId: 'vm1',
-      variantId: 'vv1',
-      customerId: 'u6',
-      customerName: 'David Miller',
-      customerPhone: '+1 (555) 778-9900',
-      position: 1,
-      status: 'waiting',
-      createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-    },
-  ];
-
-  private _offers: Offer[] = [
-    ...demandFixtures().offers,
-    {
-      id: 'o1',
-      queueEntryId: 'q2',
-      customerId: 'u1',
-      customerName: 'Alice Johnson',
-      dealerId: 'd2',
-      dealerName: 'City Cars Direct',
-      vehicleModelId: 'vm4',
-      vehicleName: 'Tesla Model Y',
-      variantName: 'Long Range AWD',
-      color: 'Stealth Grey',
-      availability: 'In Stock (Allocation #TY-44)',
-      expectedDeliveryDate: new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
-      offeredPrice: 46500,
-      originalPrice: 47990,
-      status: 'pending',
-      expiryDate: new Date(Date.now() + 86400000 * 5).toISOString(),
-      createdAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-      notes: 'Queue priority offer: $1,490 dealer incentive discount.',
-      terms: 'Offer price valid for 5 days. Includes complimentary ceramic paint coating and 1st year mobile charger.',
-    },
-    {
-      id: 'o2',
-      queueEntryId: 'q1',
-      customerId: 'u1',
-      customerName: 'Alice Johnson',
-      dealerId: 'd1',
-      dealerName: 'Premier Auto Group',
-      vehicleModelId: 'vm1',
-      vehicleName: 'Toyota Camry',
-      variantName: 'XSE Hybrid',
-      color: 'Wind Chill Pearl',
-      availability: 'In Stock (2 units)',
-      expectedDeliveryDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
-      offeredPrice: 33900,
-      originalPrice: 34850,
-      status: 'pending',
-      expiryDate: new Date(Date.now() + 86400000 * 4).toISOString(),
-      createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
-      notes: 'Exclusive queue match pricing with immediate showroom delivery.',
-      terms: 'Price includes destination fee and 2 years complimentary factory scheduled maintenance.',
-    },
-  ];
-
-  private _bookings: Booking[] = [
-    ...demandFixtures().bookings,
-    {
-      id: 'b1',
-      customerId: 'u1',
-      customerName: 'Alice Johnson',
-      customerPhone: '+1 (555) 234-5678',
-      listingId: 'l1',
-      dealerId: 'd1',
-      status: 'confirmed',
-      bookingDate: new Date(Date.now() + 86400000 * 2).toISOString(),
-      lockedPrice: 28400,
-      lockDurationHours: 72,
-      priceLockedUntil: new Date(Date.now() + 86400000 * 3).toISOString(),
-      vehicleName: 'Toyota Camry',
-      variantName: 'LE',
-      color: 'Midnight Black Metallic',
-      createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-      notes: 'Test drive scheduled for Midnight Black Camry LE at LA showroom.',
-    },
-  ];
+  private demo = indiaDemo();
+  private _users = this.demo.users;
+  private _dealers = this.demo.dealers;
+  private _vehicleModels: VehicleModel[] = [];
+  private _listings = this.demo.listings;
+  private _queues = this.demo.queues;
+  private _offers = this.demo.offers;
+  private _bookings = this.demo.bookings;
+  private demoPassword = hashPassword('demo1234');
+  private _passwords = new Map(['u1','u2','u3'].map(id => [id, this.demoPassword]));
 
   async connect(): Promise<void> {}
   async disconnect(): Promise<void> {}
 
   auth = {
     login: async (credentials: { email: string; password: string }) => {
-      const user = this._users.find(u => u.email.toLowerCase() === credentials.email.toLowerCase());
-      if (!user || this._passwords[user.email] !== credentials.password) {
+      const input = authInput.safeParse(credentials);
+      if (!input.success) return { success:false, error:'Enter a valid email address and password.' };
+      const user = this._users.find(u => u.email.toLowerCase() === input.data.email);
+      const hash = user ? await this._passwords.get(user.id) : undefined;
+      if (!await verifyPassword(input.data.password, hash) || !user) {
         return { success: false, error: 'Invalid email address or password. Please check your credentials.' };
       }
       if (user.status === 'suspended') return { success: false, error: 'This customer account is suspended.' };
@@ -851,12 +74,17 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       return { success: true, data: { user: userWithProfile, token: `mock-jwt-token-${user.id}` } };
     },
 
-    register: async (data: RegisterData) => {
+    register: async (input: RegisterData) => {
+      const parsed = signup.safeParse(input);
+      if (!parsed.success) return { success:false, error:'Check the registration fields and try again.' };
+      const data = parsed.data;
+      if (data.role==='dealer' && !isIndianLocation(data)) return {success:false,error:'Select a listed Indian state and city.'};
+      const passwordHash = hashPassword(data.password);
       if (this._users.find(u => u.email.toLowerCase() === data.email.toLowerCase())) {
         return { success: false, error: 'An account with this email address already exists.' };
       }
 
-      const newUserId = `u${Date.now()}`;
+      const newUserId = randomUUID();
       const newUser: User = {
         id: newUserId,
         name: data.name,
@@ -868,7 +96,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
 
       if (data.role === 'dealer') {
         const newDealer: Dealer = {
-          id: `d${Date.now()}`,
+          id: randomUUID(),
           userId: newUserId,
           dealershipName: data.dealershipName,
           registrationNumber: data.registrationNumber,
@@ -888,7 +116,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       }
 
       this._users.push(newUser);
-      this._passwords[data.email] = data.password;
+      this._passwords.set(newUserId, passwordHash);
 
       return {
         success: true,
@@ -977,7 +205,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       const dealerId = (raw.dealerId as string) || 'd1';
       if (!this.dealerCanTrade(dealerId)) return { success: false, error: 'Only approved dealers can publish inventory.' };
       const newListing: VehicleListing = {
-        id: `l${Date.now()}`,
+        id: randomUUID(),
         dealerId,
         dealer: this._dealers.find(dealer => dealer.id === dealerId),
         ...resolveVehicleIdentity({
@@ -1141,14 +369,11 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
   queue = {
     join: async (data: { vehicleModelId: string; customerId: string; variantId?: string; city?: string }) => {
       if (this.customerSuspended(data.customerId)) return { success: false, error: 'This customer account is suspended.' };
-      const position = this._queues.filter(
-        q => q.vehicleModelId === data.vehicleModelId && q.variantId === (data.variantId || '') &&
-        q.city?.trim().toLowerCase() === data.city?.trim().toLowerCase() &&
-        (q.status === 'waiting' || q.status === 'offered')
-      ).length + 1;
+      const { existing, position } = queueAllocation(this._queues,data);
+      if (existing) return { success:true,data:{ ...existing,...this.queueVehicle(existing) } };
       const customer = this._users.find(u => u.id === data.customerId);
       const entry: QueueEntry = {
-        id: `q${Date.now()}`,
+        id: randomUUID(),
         vehicleModelId: data.vehicleModelId,
         variantId: data.variantId || '',
         city: data.city,
@@ -1173,7 +398,9 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       const idx = this._queues.findIndex(q => q.id === queueId);
       if (idx === -1) return { success: false, error: 'Queue entry not found.' };
       if (this.customerSuspended(this._queues[idx].customerId)) return { success: false, error: 'This customer account is suspended.' };
+      if (!['waiting','offered'].includes(this._queues[idx].status)) return { success:false,error:'This queue entry is no longer active.' };
       this._queues[idx].status = 'cancelled';
+      this.expireQueueOffers(queueId);
       return { success: true, data: { id: queueId } };
     },
 
@@ -1196,6 +423,12 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     },
   };
 
+  private expireQueueOffers(queueId: string) {
+    for (const offer of this._offers) {
+      if (offer.queueEntryId === queueId && offer.status === 'pending') offer.status = 'expired';
+    }
+  }
+
   offers = {
     accept: async (id: string, lockDurationHours: number): Promise<ApiResponse<{ offer: Offer; bookingId: string }>> => {
       const offer = this._offers.find(item => item.id === id);
@@ -1207,6 +440,8 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
         return { success: false, error: 'Select a supported price lock duration.' };
       }
 
+      const queue = this._queues.find(item => item.id === offer.queueEntryId);
+      if (queue && !['waiting','offered'].includes(queue.status)) return { success:false,error:'This queue entry is no longer active.' };
       const now = Date.now();
       const booking: Booking = {
         id: `booking-${offer.id}`,
@@ -1226,10 +461,15 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
         bookingDate: new Date(now + 2 * 86_400_000).toISOString(),
       };
       this._bookings.unshift(booking);
+      this.notify(offer.customerId,'Offer accepted','Your accepted price is locked.','booking');
+      this.notify(this._dealers.find(dealer => dealer.id === offer.dealerId)?.userId,
+        'Offer accepted',`A customer accepted your offer for ${offer.vehicleName}.`,'booking');
       this.audit.record('Booking accepted', offer.customerId, booking.id, `Accepted offer ${offer.id} · ${offer.vehicleName}`);
       offer.status = 'accepted';
-      const queue = this._queues.find(item => item.id === offer.queueEntryId);
-      if (queue && (queue.status === 'waiting' || queue.status === 'offered')) queue.status = 'booked';
+      if (queue) {
+        queue.status = 'booked';
+        this.expireQueueOffers(queue.id);
+      }
       return { success: true, data: { offer, bookingId: booking.id } };
     },
 
@@ -1258,13 +498,23 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       if (!listing || !pricingService.isValid(data.offeredPrice)) {
         return { success: false, error: 'Select a dealer listing and enter a valid offer price.' };
       }
+      const queue = this._queues.find(entry => entry.id === data.queueEntryId);
+      if (!queue || queue.customerId !== data.customerId || !['waiting','offered'].includes(queue.status) ||
+          queue.vehicleModelId !== listing.vehicleModelId || (queue.variantId && queue.variantId !== listing.variantId) ||
+          (queue.city && queue.city.toLowerCase() !== this._dealers.find(dealer => dealer.id === data.dealerId)?.city.toLowerCase())) {
+        return { success:false,error:'Choose an active customer in the listing’s shared queue.' };
+      }
+      if (!(Date.parse(data.expiryDate) > Date.now())) return { success:false,error:'Choose a future offer expiration.' };
       const newOffer: Offer = {
-        ...data,
+        ...data,status:'pending',customerName:queue.customerName,
+        vehicleName:`${listing.brand} ${listing.model}`,variantName:listing.variant,vehicleModelId:listing.vehicleModelId,
         originalPrice: pricingService.current(listing),
-        id: `o${Date.now()}`,
+        id: randomUUID(),
         createdAt: new Date().toISOString(),
       };
       this._offers.push(newOffer);
+      this.notify(newOffer.customerId,'New dealer offer',`You received an offer for the ${newOffer.vehicleName}.`,'offer');
+      queue.status = 'offered';
       this.audit.record('Offer created', newOffer.dealerId, newOffer.id, `${newOffer.vehicleName} · ${newOffer.customerId}`);
       return { success: true, data: newOffer };
     },
@@ -1272,10 +522,15 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     updateStatus: async (id: string, status: Offer['status']) => {
       const offer = this._offers.find(o => o.id === id);
       if (!offer) return { success: false, error: 'Offer not found.' };
-      if (offer.status !== 'pending' || status === 'accepted') {
+      if (offer.status !== 'pending' || !['declined','expired'].includes(status) || !(Date.parse(offer.expiryDate) > Date.now())) {
         return { success: false, error: 'This offer status cannot be changed.' };
       }
       offer.status = status;
+      if (status === 'declined') this.notify(this._dealers.find(dealer => dealer.id === offer.dealerId)?.userId,
+        'Offer declined',`Your offer for ${offer.vehicleName} was declined.`,'offer');
+      const queue = this._queues.find(entry => entry.id === offer.queueEntryId);
+      if (queue?.status === 'offered' && !this._offers.some(item => item.queueEntryId === queue.id &&
+        item.status === 'pending' && Date.parse(item.expiryDate) > Date.now())) queue.status = 'waiting';
       return { success: true, data: offer };
     },
   };
@@ -1302,7 +557,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
       const now = Date.now();
       const customer = this._users.find(u => u.id === data.customerId);
       const booking: Booking = {
-        id: `b${Date.now()}`,
+        id: randomUUID(),
         customerId: data.customerId,
         customerName: customer?.name || 'Customer',
         customerPhone: customer?.phoneNumber,
@@ -1322,6 +577,7 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
         dealer: this._dealers.find(d => d.id === data.dealerId),
       };
       this._bookings.push(booking);
+      this.notify(booking.dealer?.userId,'New booking request',`A customer requested a booking for ${booking.vehicleName}.`,'booking');
       return { success: true, data: booking };
     },
 
@@ -1350,14 +606,37 @@ export class MockDatabaseAdapter implements IDatabaseAdapter {
     updateStatus: async (id: string, status: Booking['status']) => {
       const booking = this._bookings.find(b => b.id === id);
       if (!booking) return { success: false, error: 'Booking not found.' };
-      if (booking.status !== status && status === 'confirmed') {
+      if (!canChangeBooking(booking.status,status)) return { success:false,error:'Invalid booking transition.' };
+      if (booking.status === status) return { success:true,data:booking };
+      if (status === 'confirmed') {
         this.audit.record('Booking accepted', booking.dealerId, booking.id, `Dealer confirmed ${booking.vehicleName || booking.listingId}`);
       }
       booking.status = status;
       booking.updatedAt = new Date().toISOString();
+      this.notify(booking.customerId,'Booking updated',`Your booking is now ${status.replace(/_/g,' ')}.`,'booking');
+      (booking.statusHistory ??= []).push({ status,timestamp:booking.updatedAt });
       return { success: true, data: booking };
     },
   };
+
+  private notifications: Notification[] = [];
+
+  private notify(userId: string | undefined,title: string,message: string,category: 'booking' | 'offer') {
+    if (!userId) return;
+    this.notifications.unshift({ id:randomUUID(),userId,title,message,category,
+      type:'info',isRead:false,createdAt:new Date().toISOString() });
+  }
+
+  async getNotifications(userId: string) {
+    return { success:true,data:this.notifications.filter(item => item.userId === userId).slice(0,100) };
+  }
+
+  async readNotifications(userId: string,id?: string) {
+    for (const item of this.notifications) {
+      if (item.userId === userId && (!id || id === item.id)) item.isRead = true;
+    }
+    return { success:true,data:true };
+  }
 
   admin = {
     getStats: async (): Promise<ApiResponse<AdminStats>> => ({

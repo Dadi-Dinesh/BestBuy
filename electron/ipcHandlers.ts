@@ -1,3 +1,7 @@
+import { indiaLocations } from '../src/data/indiaLocations';
+import { join } from 'node:path';
+import { fileIndiaStore } from '../src/database/indiaStores';
+import { createIndiaMarketplace } from '../src/services/indiaMarketplace';
 import type { IpcMain, IpcMainInvokeEvent } from 'electron';
 import type { IDatabaseAdapter } from '../src/database';
 import { PostgresDatabaseAdapter } from '../src/database/adapters/PostgresDatabaseAdapter';
@@ -7,15 +11,18 @@ const denied = () => ({ success: false, error: 'You do not have access to this o
 const marketplace = (user: User) => user.role !== 'admin';
 const approved = (user: User) => user.role === 'dealer' && user.dealerProfile?.status === 'approved';
 
-export function registerIpcHandlers(ipc: IpcMain, adapter: IDatabaseAdapter): void {
+export function registerIpcHandlers(
+  ipc: IpcMain, adapter: IDatabaseAdapter, isTrustedSender: (event: IpcMainInvokeEvent) => boolean = () => true,
+): void {
   const sessions = new Map<number, { userId: string; expires: number }>();
   const authenticatedSenders = new Set<number>();
-  const lastAuthAttempt = new Map<number, number>();
+  const lastAuthFailure = new Map<number, number>();
+  const authenticating = new Map<number, symbol>();
   const live = adapter instanceof PostgresDatabaseAdapter ? adapter : undefined;
 
   function publicHandler<T extends unknown[]>(channel: string, action: (event: IpcMainInvokeEvent, ...args: T) => unknown) {
     ipc.handle(channel, async (event, ...args) => {
-      if (event.senderFrame !== event.sender.mainFrame) return denied();
+      if (event.senderFrame !== event.sender.mainFrame || !isTrustedSender(event)) return denied();
       try {
         return await action(event,...args as T);
       } catch {
@@ -40,25 +47,37 @@ export function registerIpcHandlers(ipc: IpcMain, adapter: IDatabaseAdapter): vo
   async function signIn(event: IpcMainInvokeEvent, authenticate: () => Promise<ApiResponse<{ user: User; token: string }>>) {
     const sender = event.sender.id;
     const now = Date.now();
-    if (now - (lastAuthAttempt.get(sender) ?? 0) < 700) return { success:false,error:'Wait a moment before trying again.' };
-    lastAuthAttempt.set(sender,now);
+    if (authenticating.has(sender) || now - (lastAuthFailure.get(sender) ?? 0) < 700) {
+      return { success:false,error:'Wait a moment before trying again.' };
+    }
+    const attempt = Symbol();
+    authenticating.set(sender,attempt);
     if (!authenticatedSenders.has(sender)) {
       authenticatedSenders.add(sender);
       event.sender.once('destroyed', () => {
         sessions.delete(sender);
         authenticatedSenders.delete(sender);
-        lastAuthAttempt.delete(sender);
+        lastAuthFailure.delete(sender);
+        authenticating.delete(sender);
       });
     }
-    const result = await authenticate();
-    if (result.success && result.data && !event.sender.isDestroyed()) sessions.set(sender,{userId:result.data.user.id,expires:now+12*3_600_000});
-    return result;
+    try {
+      const result = await authenticate();
+      if (authenticating.get(sender) !== attempt || event.sender.isDestroyed()) return denied();
+      if (result.success && result.data) sessions.set(sender,{userId:result.data.user.id,expires:Date.now()+12*3_600_000});
+      else lastAuthFailure.set(sender,Date.now());
+      return result;
+    } finally {
+      if (authenticating.get(sender) === attempt) authenticating.delete(sender);
+    }
   }
 
   publicHandler('auth:login', (event, credentials: { email: string; password: string }) => signIn(event,() => adapter.auth.login(credentials)));
   publicHandler('auth:register', (event,data: RegisterData) =>
     ['customer','dealer'].includes(data?.role) ? signIn(event,() => adapter.auth.register(data)) : denied());
-  publicHandler('auth:logout', event => { sessions.delete(event.sender.id); return { success:true }; });
+  publicHandler('auth:resetPassword', (event,code:unknown,password:unknown) =>
+    live ? live.resetPassword(code,password) : {success:false,error:'Password recovery requires the PostgreSQL application.'});
+  publicHandler('auth:logout', event => { sessions.delete(event.sender.id); authenticating.delete(event.sender.id); return { success:true }; });
   handle('auth:getUserById', (user,id: string) => user.id === id ? { success:true,data:user } : denied());
   handle('auth:getAllUsers', user => user.role === 'admin' ? adapter.auth.getAllUsers() : denied());
 
@@ -66,6 +85,20 @@ export function registerIpcHandlers(ipc: IpcMain, adapter: IDatabaseAdapter): vo
     return approved(user) && (await adapter.vehicles.getById(id)).data?.dealerId === user.dealerProfile?.id;
   }
 
+  publicHandler('vehicles:preview',async (_event,location?:Record<string,string>)=>{
+    const {state='',city='',pin='',locality=''}=location??{};
+    if([state,city,pin,locality].some(value=>typeof value!=='string'||value.length>80)||
+      (state&&!indiaLocations[state])||(city&&!indiaLocations[state]?.includes(city))||(pin&&!/^[1-9]\d{5}$/.test(pin)))
+      return {success:false,error:'Choose a valid Indian location.'};
+    const result=await adapter.vehicles.getAll({marketplace:true});
+    if(!result.success) return result;
+    return {success:true,data:(result.data??[]).filter(item=>item.dealer && indiaLocations[item.dealer.state]?.includes(item.dealer.city) &&
+      (!state||item.dealer.state===state)&&(!city||item.dealer.city===city)&&(!pin||item.dealer.pinCode===pin)&&
+      (!locality||item.dealer.address.toLowerCase().includes(locality.toLowerCase()))).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,6).map(item=>({
+      id:item.id,brand:item.brand,model:item.model,variant:item.variant,dealerOfferPrice:item.dealerOfferPrice,
+      dealer:{city:item.dealer?.city,dealershipName:item.dealer?.dealershipName},
+    }))};
+  });
   handle('vehicles:getAll', (user,filters?: Record<string,unknown>) => {
     const own = user.role === 'dealer' && user.dealerProfile?.id === filters?.dealerId;
     return adapter.vehicles.getAll({ ...filters,marketplace:marketplace(user) && !own });
@@ -164,9 +197,13 @@ export function registerIpcHandlers(ipc: IpcMain, adapter: IDatabaseAdapter): vo
   handle('admin:getAuditLog', user => user.role === 'admin' ? adapter.admin.getAuditLog() : denied());
   handle('admin:updateCustomerStatus', (user,id: string,status: 'active'|'suspended') => user.role === 'admin'
     ? adapter.admin.updateCustomerStatus(id,status,user.id) : denied());
-  if (live) {
-    handle('notifications:getAll', user => live.getNotifications(user.id));
-    handle('notifications:markRead', (user,id?: string) => live.readNotifications(user.id,id));
-  }
+  handle('notifications:getAll', user => adapter.getNotifications?.(user.id) ?? { success:true,data:[] });
+  handle('notifications:markRead', (user,id?: string) => adapter.readNotifications?.(user.id,id) ?? denied());
+  let india: ReturnType<typeof createIndiaMarketplace> | undefined;
+  handle('india:operation', (user, command: string, input?: unknown) => {
+    india ??= createIndiaMarketplace(live?.indiaStore() ?? fileIndiaStore(join(require('electron').app.getPath('userData'),'india-marketplace.json')),
+      async id => (await adapter.vehicles.getById(id)).data);
+    return india(user,command,input);
+  });
   publicHandler('app:usesDatabase', () => !!live);
 }

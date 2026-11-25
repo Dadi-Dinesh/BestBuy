@@ -1,50 +1,6 @@
 import { ApiResponse, Notification } from '../types';
 
-let mockNotifications: Notification[] = [
-  {
-    id: 'n1',
-    userId: 'u1',
-    title: 'New Priority Offer Received!',
-    message: 'City Cars Direct sent you a special offer of $46,500 on Tesla Model Y Long Range AWD ($1,490 discount).',
-    type: 'success',
-    category: 'offer',
-    linkTo: '/compare',
-    isRead: false,
-    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-  },
-  {
-    id: 'n2',
-    userId: 'u1',
-    title: 'New Dealer Incentive: Toyota Camry',
-    message: 'Premier Auto Group submitted an offer of $33,900 on Camry XSE Hybrid with 2 years complimentary service.',
-    type: 'info',
-    category: 'offer',
-    linkTo: '/dashboard',
-    isRead: false,
-    createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-  },
-  {
-    id: 'n3',
-    userId: 'u1',
-    title: 'Queue Priority Update',
-    message: 'You moved to Position #1 in the Tesla Model Y queue. Dealers are reviewing your allocation.',
-    type: 'warning',
-    category: 'queue',
-    linkTo: '/queue',
-    isRead: true,
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 'n4',
-    userId: 'u2', // Dealer Premier Auto Group
-    title: 'Customer Joined Queue',
-    message: 'Alice Johnson joined the waitlist for Toyota Camry XSE Hybrid.',
-    type: 'info',
-    category: 'queue',
-    isRead: false,
-    createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-  },
-];
+let mockNotifications: Notification[] = [];
 
 type Listener = (notifications: Notification[]) => void;
 const listeners = new Set<Listener>();

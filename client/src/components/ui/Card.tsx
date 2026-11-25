@@ -12,7 +12,7 @@ interface CardProps {
 const paddingStyles = {
   none: '',
   sm: 'p-4',
-  md: 'p-6',
+  md: 'p-[var(--space-panel)]',
   lg: 'p-8',
 };
 
@@ -26,7 +26,7 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div
       className={cn(
-        'bg-white border border-slate-200 rounded-xl shadow-sm',
+        'card',
         paddingStyles[padding],
         hoverable && 'hover:shadow-md hover:border-slate-300 transition-all cursor-pointer',
         className

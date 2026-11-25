@@ -1,6 +1,7 @@
+import { AuthLayout } from '../components/layout/AuthLayout';
 import { useDemoMode } from '../services/desktopMode';
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Car, Mail, Lock, Eye, EyeOff, AlertCircle, ShoppingBag, Store, ShieldCheck } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -10,6 +11,7 @@ import { UserRole } from '../types';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const [params]=useSearchParams();
   const { setUser } = useAuthStore();
 
   const [email, setEmail] = useState('');
@@ -52,7 +54,8 @@ export const LoginPage: React.FC = () => {
 
       if (result.success && result.data) {
         setUser(result.data.user, result.data.token);
-        navigate('/dashboard');
+        const next=params.get('next');
+        navigate(result.data.user.role==='customer' && next && (next.startsWith('/catalogue?')||next==='/offers') ? next : '/dashboard');
       } else {
         setGeneralError(result.error || 'Authentication failed. Please verify your credentials.');
       }
@@ -66,18 +69,18 @@ export const LoginPage: React.FC = () => {
   const demo = useDemoMode();
 
   const fillDemo = (role: UserRole) => {
-    setEmail(`${role}@demo.com`);
+    setEmail(`${role}@bestbuy.example`);
     setPassword('demo1234');
     setErrors({});
     setGeneralError('');
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">
+    <AuthLayout>
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <div className="w-11 h-11 bg-slate-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-slate-500/20">
             <Car size={24} />
           </div>
           <div>
@@ -93,9 +96,9 @@ export const LoginPage: React.FC = () => {
           </div>
 
           {generalError && (
-            <div className="mb-5 p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5">
-              <AlertCircle size={18} className="text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-red-700 font-medium leading-relaxed">{generalError}</p>
+            <div className="mb-5 p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-2.5">
+              <AlertCircle size={18} className="text-slate-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-700 font-medium leading-relaxed">{generalError}</p>
             </div>
           )}
 
@@ -144,6 +147,7 @@ export const LoginPage: React.FC = () => {
               Sign In
             </Button>
           </form>
+          <Link to="/forgot-password" className="mt-3 block text-sm font-semibold underline">Forgot password?</Link>
 
           {demo &&
           <div className="mt-8 pt-5 border-t border-slate-100">
@@ -154,9 +158,9 @@ export const LoginPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => fillDemo('customer')}
-                className="flex flex-col items-center gap-1 p-2.5 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all text-center group"
+                className="flex flex-col items-center gap-1 p-2.5 rounded-xl border border-slate-200 hover:border-slate-400 hover:bg-slate-50/50 transition-all text-center group"
               >
-                <ShoppingBag size={16} className="text-blue-600 group-hover:scale-110 transition-transform" />
+                <ShoppingBag size={16} className="text-slate-600 group-hover:scale-110 transition-transform" />
                 <span className="text-xs font-semibold text-slate-800">Customer</span>
                 <span className="text-[10px] text-slate-400">Alice</span>
               </button>
@@ -164,9 +168,9 @@ export const LoginPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => fillDemo('dealer')}
-                className="flex flex-col items-center gap-1 p-2.5 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 transition-all text-center group"
+                className="flex flex-col items-center gap-1 p-2.5 rounded-xl border border-slate-200 hover:border-slate-400 hover:bg-slate-50/50 transition-all text-center group"
               >
-                <Store size={16} className="text-indigo-600 group-hover:scale-110 transition-transform" />
+                <Store size={16} className="text-slate-600 group-hover:scale-110 transition-transform" />
                 <span className="text-xs font-semibold text-slate-800">Dealer</span>
                 <span className="text-[10px] text-slate-400">Bob</span>
               </button>
@@ -174,9 +178,9 @@ export const LoginPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => fillDemo('admin')}
-                className="flex flex-col items-center gap-1 p-2.5 rounded-xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-center group"
+                className="flex flex-col items-center gap-1 p-2.5 rounded-xl border border-slate-200 hover:border-slate-400 hover:bg-slate-50/50 transition-all text-center group"
               >
-                <ShieldCheck size={16} className="text-emerald-600 group-hover:scale-110 transition-transform" />
+                <ShieldCheck size={16} className="text-slate-600 group-hover:scale-110 transition-transform" />
                 <span className="text-xs font-semibold text-slate-800">Admin</span>
                 <span className="text-[10px] text-slate-400">System</span>
               </button>
@@ -188,18 +192,18 @@ export const LoginPage: React.FC = () => {
         <div className="text-center text-xs text-slate-500 mt-6 space-y-1">
           <p>
             Don't have an account yet?{' '}
-            <Link to="/register" className="text-blue-600 font-semibold hover:underline">
+            <Link to="/register" className="text-slate-600 font-semibold hover:underline">
               Create an account
             </Link>
           </p>
           <p>
             Want to see all role features?{' '}
-            {demo && <Link to="/role-selection" className="text-blue-600 font-semibold hover:underline">
+            {demo && <Link to="/role-selection" className="text-slate-600 font-semibold hover:underline">
               Browse role catalog
             </Link>}
           </p>
         </div>
       </div>
-    </div>
+    </AuthLayout>
   );
 };

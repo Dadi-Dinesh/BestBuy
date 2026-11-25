@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { RegisterData, Dealer, Offer, Booking } from '../src/types';
 
 const electronAPI = {
+  india: { operation: (command: string, input?: unknown) => ipcRenderer.invoke('india:operation',command,input) },
   usesDatabase: () => ipcRenderer.invoke('app:usesDatabase') as Promise<boolean>,
   notifications: {
     getAll: () => ipcRenderer.invoke('notifications:getAll'),
@@ -9,6 +10,7 @@ const electronAPI = {
   },
   // Auth
   auth: {
+    resetPassword: (code: string,password: string) => ipcRenderer.invoke('auth:resetPassword',code,password),
     login: (credentials: { email: string; password: string }) =>
       ipcRenderer.invoke('auth:login', credentials),
     register: (data: RegisterData) =>
@@ -20,6 +22,7 @@ const electronAPI = {
 
   // Vehicles
   vehicles: {
+    preview: (location: Record<string,string>) => ipcRenderer.invoke('vehicles:preview',location),
     getPriceChanges: () => ipcRenderer.invoke('vehicles:getPriceChanges'),
     getAll: (filters?: Record<string, unknown>) =>
       ipcRenderer.invoke('vehicles:getAll', filters),

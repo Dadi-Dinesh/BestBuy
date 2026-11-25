@@ -1,3 +1,4 @@
+import { istDate } from '../../../src/services/indiaFormat';
 import { Booking, Offer, QueueEntry, VehicleListing } from '../types';
 import { pricingService } from '../../../src/services/pricingService';
 
@@ -60,8 +61,7 @@ export function calculateMarkets(vehicles: VehicleListing[], queues: QueueEntry[
 export type Market = ReturnType<typeof calculateMarkets>[number];
 
 export function activityTrends(queues: QueueEntry[], offers: Offer[], bookings: Booking[], now = Date.now()) {
-  const end = new Date(now);
-  end.setUTCHours(0, 0, 0, 0);
+  const end = new Date(`${istDate(new Date(now))}T00:00:00+05:30`);
   return Array.from({ length: 7 }, (_, index) => {
     const start = end.getTime() - (6 - index) * dayMs;
     const inDay = (date?: string) => {
@@ -69,7 +69,7 @@ export function activityTrends(queues: QueueEntry[], offers: Offer[], bookings: 
       return time >= start && time < start + dayMs && time <= now;
     };
     return {
-      label: new Date(start).toISOString().slice(0, 10),
+      label: istDate(new Date(start)),
       joined: queues.filter(queue => inDay(queue.createdAt)).length,
       bookings: bookings.filter(booking => inDay(bookingCreatedAt(booking))).length,
       averageOffer: pricingService.average(offers.filter(offer => inDay(offer.createdAt)).map(offer => offer.offeredPrice)),

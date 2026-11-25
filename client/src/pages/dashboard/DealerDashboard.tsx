@@ -1,3 +1,6 @@
+import { SelectField, useIndiaCatalogue } from '../india/IndiaCatalogue';
+import { VehicleImage } from '../../components/ui/VehicleImage';
+import { Modal } from '../../components/ui/Modal';
 import { DemandBadge, MarketMonitoring, useMarketData } from '../../components/demand/MarketMonitoring';
 import { cityKey, isActiveQueue, marketKey } from '../../services/demandService';
 import { pricingService } from '../../../../src/services/pricingService';
@@ -79,9 +82,12 @@ export const DealerDashboard: React.FC = () => {
   const [editingListing, setEditingListing] = useState<VehicleListing | null>(null);
 
   // Add Vehicle Form State
-  const [addBrand, setAddBrand] = useState('Toyota');
-  const [addModel, setAddModel] = useState('Camry');
-  const [addVariant, setAddVariant] = useState('LE');
+  const {cars:catalogue, error:catalogueError} = useIndiaCatalogue();
+  const [addBrand, setAddBrand] = useState('');
+  const [addModel, setAddModel] = useState('');
+  const [addVariant, setAddVariant] = useState('');
+  const selectedModel = catalogue.find(car=>car.manufacturer===addBrand && car.model===addModel);
+
   const [addYear, setAddYear] = useState('2024');
   const [addFuel, setAddFuel] = useState<FuelType>('Petrol');
   const [addTrans, setAddTrans] = useState<TransmissionType>('Automatic');
@@ -120,6 +126,10 @@ export const DealerDashboard: React.FC = () => {
         if (qRes.success && qRes.data) setQueues(qRes.data);
         if (oRes.success && oRes.data) setOffers(oRes.data);
         if (bRes.success && bRes.data) setBookings(bRes.data);
+        const failed = [vRes,qRes,oRes,bRes].find(response => !response.success);
+        if (failed) setFeedback({type:'error',message:failed.error || 'Some dealership records could not be loaded.'});
+      } catch {
+        setFeedback({type:'error',message:'The dealership workspace could not be loaded.'});
       } finally {
         setIsLoading(false);
       }
@@ -132,7 +142,7 @@ export const DealerDashboard: React.FC = () => {
     e.preventDefault();
     setFormError('');
 
-    if (!addBrand.trim() || !addModel.trim() || !addVariant.trim() || !addColor.trim()) {
+    if (!selectedModel?.variants.some(item=>item.name===addVariant) || !addColor.trim()) {
       setFormError('Please fill in Brand, Model, Variant, and Colour.');
       return;
     }
@@ -144,6 +154,11 @@ export const DealerDashboard: React.FC = () => {
       return;
     }
 
+    const quantity = Number(addQuantity);
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      setFormError('Available quantity must be a whole number of zero or more.');
+      return;
+    }
     const payload: CreateVehicleListingData = {
       dealerId,
       brand: addBrand.trim(),
@@ -158,9 +173,9 @@ export const DealerDashboard: React.FC = () => {
       exShowroomPrice: exPrice,
       onRoadPrice: Number(addOnRoad) || Math.round(exPrice * 1.12),
       dealerOfferPrice: offerPriceNum,
-      quantity: parseInt(addQuantity, 10) || 1,
+      quantity,
       deliveryTimeline: addDelivery,
-      availability: (parseInt(addQuantity, 10) || 1) > 0 ? 'available' : 'out_of_stock',
+      availability: quantity > 0 ? 'available' : 'out_of_stock',
       description: addDescription.trim() || `${addBrand} ${addModel} ${addVariant} with factory equipment and showroom warranty.`,
       images: addImageUrl.trim()
         ? [addImageUrl.trim()]
@@ -190,6 +205,7 @@ export const DealerDashboard: React.FC = () => {
 
   // Handle Quick Price Update
   const handleOpenPriceModal = (l: VehicleListing) => {
+    setFeedback(null);
     setPriceModalListing(l);
     setEditExShowroom(String(l.exShowroomPrice || l.price));
     setEditOnRoad(String(l.onRoadPrice || Math.round(l.price * 1.12)));
@@ -215,6 +231,8 @@ export const DealerDashboard: React.FC = () => {
       setPriceModalListing(null);
       setFeedback({ type: 'success', message: 'Pricing updated successfully.' });
       setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ type:'error',message:res.error || 'The change could not be saved.' });
     }
   };
 
@@ -226,6 +244,8 @@ export const DealerDashboard: React.FC = () => {
       setListings(prev => prev.map(l => (l.id === id ? (res.data as VehicleListing) : l)));
       setFeedback({ type: 'success', message: `Vehicle status changed to ${newStatus.replace('_', ' ')}.` });
       setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ type:'error',message:res.error || 'The change could not be saved.' });
     }
   };
 
@@ -239,6 +259,8 @@ export const DealerDashboard: React.FC = () => {
       setListings(prev => prev.filter(l => l.id !== id));
       setFeedback({ type: 'success', message: 'Vehicle deleted from your inventory.' });
       setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ type:'error',message:res.error || 'The change could not be saved.' });
     }
   };
 
@@ -254,6 +276,8 @@ export const DealerDashboard: React.FC = () => {
       setEditingListing(null);
       setFeedback({ type: 'success', message: 'Vehicle details updated successfully.' });
       setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ type:'error',message:res.error || 'The change could not be saved.' });
     }
   };
 
@@ -274,7 +298,7 @@ export const DealerDashboard: React.FC = () => {
       customerId: selectedQueue.customerId,
       customerName: selectedQueue.customerName || 'Customer',
       dealerId,
-      dealerName: user?.dealerProfile?.dealershipName || 'Premier Auto Group',
+      dealerName: user?.dealerProfile?.dealershipName || 'Coastal Auto Group',
       vehicleModelId: selectedQueue.vehicleModelId,
       listingId: listing.id,
       vehicleName: `${listing.brand} ${listing.model}`,
@@ -295,6 +319,8 @@ export const DealerDashboard: React.FC = () => {
       setOfferNotes('');
       setFeedback({ type: 'success', message: 'Direct offer transmitted to customer!' });
       setTimeout(() => setFeedback(null), 3000);
+    } else {
+      setFeedback({ type:'error',message:res.error || 'The change could not be saved.' });
     }
   };
 
@@ -342,6 +368,7 @@ export const DealerDashboard: React.FC = () => {
       {/* Top Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[.16em] text-slate-500">Dealer workspace</p>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
               {user?.dealerProfile?.dealershipName || 'Dealership Inventory & Workspace'}
@@ -350,7 +377,7 @@ export const DealerDashboard: React.FC = () => {
           </div>
           <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
             <Building2 size={13} className="text-slate-400" />
-            <span>Showroom: {user?.dealerProfile?.city || 'Los Angeles'}, {user?.dealerProfile?.state || 'CA'}</span>
+            <span>Showroom: {user?.dealerProfile?.city || 'Visakhapatnam'}, {user?.dealerProfile?.state || 'Andhra Pradesh'}</span>
             <span>•</span>
             <span>ID: <code className="font-mono text-slate-700">{dealerId}</code></span>
           </p>
@@ -369,10 +396,11 @@ export const DealerDashboard: React.FC = () => {
 
       {feedback && (
         <div
+          role={feedback.type === 'error' ? 'alert' : 'status'}
           className={`p-3.5 rounded-xl border flex items-center gap-2.5 text-xs font-medium ${
             feedback.type === 'success'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : 'bg-red-50 border-red-200 text-red-800'
+              ? 'bg-slate-50 border-slate-200 text-slate-800'
+              : 'bg-slate-50 border-slate-200 text-slate-800'
           }`}
         >
           {feedback.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
@@ -384,7 +412,7 @@ export const DealerDashboard: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
         <Card padding="sm" className="border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+            <div className="p-2.5 bg-slate-50 text-slate-600 rounded-xl">
               <Car size={20} />
             </div>
             <div>
@@ -394,45 +422,45 @@ export const DealerDashboard: React.FC = () => {
           </div>
         </Card>
 
-        <Card padding="sm" className="border-emerald-200 bg-emerald-50/20">
+        <Card padding="sm" className="border-slate-200 bg-slate-50/20">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
+            <div className="p-2.5 bg-slate-100 text-slate-700 rounded-xl">
               <CheckCircle2 size={20} />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-emerald-800 uppercase">Available</p>
-              <p className="text-xl font-bold text-emerald-900">{availableVehicles}</p>
+              <p className="text-[11px] font-semibold text-slate-800 uppercase">Available</p>
+              <p className="text-xl font-bold text-slate-900">{availableVehicles}</p>
             </div>
           </div>
         </Card>
 
-        <Card padding="sm" className="border-amber-200 bg-amber-50/20">
+        <Card padding="sm" className="border-slate-200 bg-slate-50/20">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-100 text-amber-700 rounded-xl">
+            <div className="p-2.5 bg-slate-100 text-slate-700 rounded-xl">
               <Clock size={20} />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-amber-800 uppercase">Reserved</p>
-              <p className="text-xl font-bold text-amber-900">{reservedVehicles}</p>
+              <p className="text-[11px] font-semibold text-slate-800 uppercase">Reserved</p>
+              <p className="text-xl font-bold text-slate-900">{reservedVehicles}</p>
             </div>
           </div>
         </Card>
 
-        <Card padding="sm" className="border-red-200 bg-red-50/20">
+        <Card padding="sm" className="border-slate-200 bg-slate-50/20">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-red-100 text-red-700 rounded-xl">
+            <div className="p-2.5 bg-slate-100 text-slate-700 rounded-xl">
               <XCircle size={20} />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-red-800 uppercase">Out of Stock</p>
-              <p className="text-xl font-bold text-red-900">{outOfStockVehicles}</p>
+              <p className="text-[11px] font-semibold text-slate-800 uppercase">Out of Stock</p>
+              <p className="text-xl font-bold text-slate-900">{outOfStockVehicles}</p>
             </div>
           </div>
         </Card>
 
         <Card padding="sm" className="border-slate-200 col-span-2 md:col-span-1">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl">
+            <div className="p-2.5 bg-slate-50 text-slate-600 rounded-xl">
               <Users size={20} />
             </div>
             <div>
@@ -447,13 +475,13 @@ export const DealerDashboard: React.FC = () => {
       {recentlyAdded.length > 0 && (
         <div className="p-3 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
-            <Sparkles size={14} className="text-blue-600" />
+            <Sparkles size={14} className="text-slate-600" />
             Recently Added:
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {recentlyAdded.map(r => (
               <span key={r.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 rounded-lg text-slate-700 font-medium border border-slate-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
                 {r.brand} {r.model} {r.variant} • {formatCurrency(r.dealerOfferPrice || r.price)}
               </span>
             ))}
@@ -467,7 +495,7 @@ export const DealerDashboard: React.FC = () => {
           onClick={() => setActiveTab('inventory')}
           className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
             activeTab === 'inventory'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-slate-600 text-slate-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -479,7 +507,7 @@ export const DealerDashboard: React.FC = () => {
           onClick={() => setActiveTab('add-vehicle')}
           className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
             activeTab === 'add-vehicle'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-slate-600 text-slate-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -491,7 +519,7 @@ export const DealerDashboard: React.FC = () => {
           onClick={() => setActiveTab('queues')}
           className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
             activeTab === 'queues'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-slate-600 text-slate-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -503,7 +531,7 @@ export const DealerDashboard: React.FC = () => {
           onClick={() => setActiveTab('offers')}
           className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
             activeTab === 'offers'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-slate-600 text-slate-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -515,14 +543,14 @@ export const DealerDashboard: React.FC = () => {
           onClick={() => setActiveTab('bookings')}
           className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
             activeTab === 'bookings'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-slate-600 text-slate-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
           <Calendar size={15} />
           Bookings ({bookings.length})
         </button>
-        <button onClick={() => setActiveTab('demand')} className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider border-b-2 ${activeTab === 'demand' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>
+        <button onClick={() => setActiveTab('demand')} className={`pb-3 px-4 text-xs font-semibold uppercase tracking-wider border-b-2 ${activeTab === 'demand' ? 'border-slate-600 text-slate-600' : 'border-transparent text-slate-500'}`}>
           Demand Trends
         </button>
       </div>
@@ -530,7 +558,8 @@ export const DealerDashboard: React.FC = () => {
       {/* TAB 1: INVENTORY MANAGEMENT DASHBOARD & SEARCH/FILTERS */}
       {activeTab === 'demand' && <MarketMonitoring monitor={monitor} dealerId={dealerId} />}
 
-      {activeTab === 'inventory' && (
+      {isLoading && <p role="status" className="text-sm text-slate-600">Loading dealership records…</p>}
+      {!isLoading && activeTab === 'inventory' && (
         <div className="space-y-4">
           {/* Search and Cascading Filter Controls */}
           <div className="bg-white p-4 border border-slate-200 rounded-xl space-y-3">
@@ -620,7 +649,7 @@ export const DealerDashboard: React.FC = () => {
                     setFilterVariant('all');
                     setFilterStatus('all');
                   }}
-                  className="text-xs text-blue-600 hover:underline font-medium ml-auto"
+                  className="text-xs text-slate-600 hover:underline font-medium ml-auto"
                 >
                   Reset Filters
                 </button>
@@ -655,7 +684,7 @@ export const DealerDashboard: React.FC = () => {
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-200">
-                              <img
+                              <VehicleImage
                                 src={v.images[0] || 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80'}
                                 alt={v.model}
                                 className="w-full h-full object-cover"
@@ -683,7 +712,7 @@ export const DealerDashboard: React.FC = () => {
                         <td className="px-5 py-4 text-xs">
                           <p className="font-semibold text-slate-800">{v.color}</p>
                           <p className="text-slate-500 mt-0.5 font-medium">
-                            Stock: <span className={v.quantity === 0 ? 'text-red-600 font-bold' : 'text-slate-800 font-semibold'}>{v.quantity} units</span>
+                            Stock: <span className={v.quantity === 0 ? 'text-slate-600 font-bold' : 'text-slate-800 font-semibold'}>{v.quantity} units</span>
                           </p>
                         </td>
 
@@ -704,7 +733,7 @@ export const DealerDashboard: React.FC = () => {
                         </td>
 
                         <td className="px-5 py-4 text-xs font-medium text-slate-700">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-semibold">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-50 text-slate-700 text-xs font-semibold">
                             <Clock size={12} />
                             {v.deliveryTimeline || 'Immediate'}
                           </span>
@@ -716,10 +745,10 @@ export const DealerDashboard: React.FC = () => {
                             onChange={e => handleUpdateAvailability(v.id, e.target.value as VehicleAvailabilityStatus)}
                             className={`text-xs font-semibold px-2.5 py-1 rounded-full border cursor-pointer ${
                               v.availability === 'available'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                ? 'bg-slate-50 text-slate-700 border-slate-200'
                                 : v.availability === 'reserved'
-                                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                : 'bg-red-50 text-red-700 border-red-200'
+                                ? 'bg-slate-50 text-slate-700 border-slate-200'
+                                : 'bg-slate-50 text-slate-700 border-slate-200'
                             }`}
                           >
                             <option value="available">Available</option>
@@ -733,15 +762,15 @@ export const DealerDashboard: React.FC = () => {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => handleOpenPriceModal(v)}
-                              className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              className="p-1.5 text-slate-600 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
                               title="Update Price"
                             >
                               <DollarSign size={16} />
                             </button>
 
                             <button
-                              onClick={() => setEditingListing(v)}
-                              className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              onClick={() => { setFeedback(null); setEditingListing(v); }}
+                              className="p-1.5 text-slate-600 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
                               title="Edit Vehicle"
                             >
                               <Edit3 size={16} />
@@ -749,7 +778,7 @@ export const DealerDashboard: React.FC = () => {
 
                             <button
                               onClick={() => handleDeleteListing(v.id, `${v.brand} ${v.model}`)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
                               title="Delete Vehicle"
                             >
                               <Trash2 size={16} />
@@ -780,7 +809,7 @@ export const DealerDashboard: React.FC = () => {
           </div>
 
           {formError && (
-            <div className="mb-5 p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs font-semibold text-red-700">
+            <div className="mb-5 p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs font-semibold text-slate-700">
               <AlertCircle size={16} />
               <span>{formError}</span>
             </div>
@@ -789,29 +818,17 @@ export const DealerDashboard: React.FC = () => {
           <form onSubmit={handleAddVehicleSubmit} className="space-y-5">
             {/* 1. Manufacturer / Brand / Model / Variant */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input
-                label="Manufacturer / Brand"
-                placeholder="e.g. Toyota, Honda, Ford"
-                value={addBrand}
-                onChange={e => setAddBrand(e.target.value)}
-                required
-              />
-
-              <Input
-                label="Car Model"
-                placeholder="e.g. Camry, Accord, F-150"
-                value={addModel}
-                onChange={e => setAddModel(e.target.value)}
-                required
-              />
-
-              <Input
-                label="Variant / Trim"
-                placeholder="e.g. LE, XSE, Sport"
-                value={addVariant}
-                onChange={e => setAddVariant(e.target.value)}
-                required
-              />
+              <SelectField name="Manufacturer / Brand" value={addBrand} placeholder="Select manufacturer"
+                options={Array.from(new Set(catalogue.map(car=>car.manufacturer))).sort()} onChange={value=>{setAddBrand(value);setAddModel('');setAddVariant('');}}/>
+              <SelectField name="Car Model" value={addModel} placeholder="Select model"
+                options={catalogue.filter(car=>car.manufacturer===addBrand).map(car=>car.model)} onChange={value=>{setAddModel(value);setAddVariant('');}}/>
+              <SelectField name="Variant / Trim" value={addVariant} placeholder="Select variant"
+                options={selectedModel?.variants.map(item=>item.name)??[]} onChange={value=>{
+                  setAddVariant(value);
+                  const item=selectedModel?.variants.find(variant=>variant.name===value);
+                  if(item){setAddFuel(item.fuel);setAddTrans(item.transmission);setAddExShowroom(String(item.indicativePrice));}
+                }}/>
+              {catalogueError&&<p role="alert">{catalogueError}</p>}
             </div>
 
             {/* 2. Specs: Year, Fuel Type, Transmission, Colour */}
@@ -871,15 +888,15 @@ export const DealerDashboard: React.FC = () => {
             {/* 3. Pricing: Ex-Showroom, On-Road, Dealer Offer Price */}
             <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-3">
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <DollarSign size={14} className="text-blue-600" />
-                Dealership Pricing Breakdown (USD)
+                <DollarSign size={14} className="text-slate-600" />
+                Dealership Pricing Breakdown (INR)
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Input
                   label="Ex-Showroom Price"
                   type="number"
-                  placeholder="e.g. 26500"
+                  placeholder="e.g. 800000"
                   value={addExShowroom}
                   onChange={e => setAddExShowroom(e.target.value)}
                   required
@@ -888,7 +905,7 @@ export const DealerDashboard: React.FC = () => {
                 <Input
                   label="On-Road Price (Est.)"
                   type="number"
-                  placeholder="e.g. 29500"
+                  placeholder="e.g. 900000"
                   value={addOnRoad}
                   onChange={e => setAddOnRoad(e.target.value)}
                   required
@@ -897,7 +914,7 @@ export const DealerDashboard: React.FC = () => {
                 <Input
                   label="Dealer Offer Price (Customer)"
                   type="number"
-                  placeholder="e.g. 28200"
+                  placeholder="e.g. 850000"
                   value={addOfferPrice}
                   onChange={e => setAddOfferPrice(e.target.value)}
                   hint="Competitive final purchase price"
@@ -935,7 +952,7 @@ export const DealerDashboard: React.FC = () => {
               </div>
 
               <Input
-                label="Odometer Mileage"
+                label="Odometer (km)"
                 type="number"
                 placeholder="0"
                 value={addMileage}
@@ -961,7 +978,7 @@ export const DealerDashboard: React.FC = () => {
                 value={addDescription}
                 onChange={e => setAddDescription(e.target.value)}
                 placeholder="Include details such as factory warranty, dealer discounts, ceramic coating, complimentary maintenance..."
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-500"
               />
             </div>
 
@@ -988,10 +1005,11 @@ export const DealerDashboard: React.FC = () => {
           </div>
 
           <div className="divide-y divide-slate-100">
+            {!isLoading && queues.length === 0 && <p className="p-5 text-sm text-slate-500">No matching shared queues.</p>}
             {queues.map(q => (
               <div key={q.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 flex flex-col items-center justify-center font-bold text-blue-700">
+                  <div className="w-11 h-11 rounded-xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center font-bold text-slate-700">
                     <span className="text-[9px] uppercase font-semibold">Rank</span>
                     <span className="text-base leading-none">#{q.position}</span>
                   </div>
@@ -1004,7 +1022,7 @@ export const DealerDashboard: React.FC = () => {
                       Buyer: <span className="font-semibold text-slate-700">{q.customerName}</span> ({q.customerPhone || 'Contact verified'})
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Waiting since {formatDate(q.createdAt)} • Status: <span className="font-semibold text-blue-600 capitalize">{q.status}</span>
+                      Waiting since {formatDate(q.createdAt)} • Status: <span className="font-semibold text-slate-600 capitalize">{q.status}</span>
                     </p>
                   </div>
                 </div>
@@ -1038,6 +1056,7 @@ export const DealerDashboard: React.FC = () => {
           </div>
 
           <div className="divide-y divide-slate-100">
+            {!isLoading && offers.length === 0 && <p className="p-5 text-sm text-slate-500">No offers sent yet.</p>}
             {offers.map(o => (
               <div key={o.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
@@ -1074,6 +1093,7 @@ export const DealerDashboard: React.FC = () => {
           </div>
 
           <div className="divide-y divide-slate-100">
+            {!isLoading && bookings.length === 0 && <p className="p-5 text-sm text-slate-500">No customer bookings yet.</p>}
             {bookings.map(b => (
               <div key={b.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
@@ -1102,8 +1122,8 @@ export const DealerDashboard: React.FC = () => {
 
       {/* MODAL 1: QUICK PRICE UPDATE */}
       {priceModalListing && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+        <Modal label="Update pricing" close={() => setPriceModalListing(null)}>
+          {feedback?.type === 'error' && <p role="alert" className="mb-3 text-sm text-slate-800">{feedback.message}</p>}
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
@@ -1120,7 +1140,7 @@ export const DealerDashboard: React.FC = () => {
 
             <form onSubmit={handleSavePriceModal} className="space-y-4">
               <Input
-                label="Ex-Showroom Price (USD)"
+                label="Ex-Showroom Price (INR)"
                 type="number"
                 value={editExShowroom}
                 onChange={e => setEditExShowroom(e.target.value)}
@@ -1129,7 +1149,7 @@ export const DealerDashboard: React.FC = () => {
               />
 
               <Input
-                label="On-Road Price (USD)"
+                label="On-Road Price (INR)"
                 type="number"
                 value={editOnRoad}
                 onChange={e => setEditOnRoad(e.target.value)}
@@ -1156,14 +1176,13 @@ export const DealerDashboard: React.FC = () => {
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* MODAL 2: FULL VEHICLE EDIT */}
       {editingListing && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-xl border border-slate-200 my-8">
+        <Modal label="Edit vehicle listing" close={() => setEditingListing(null)} wide>
+          {feedback?.type === 'error' && <p role="alert" className="mb-3 text-sm text-slate-800">{feedback.message}</p>}
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">
                 Edit Vehicle Details ({editingListing.brand} {editingListing.model})
@@ -1243,14 +1262,13 @@ export const DealerDashboard: React.FC = () => {
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* MODAL 3: DIRECT OFFER TRANSMISSION */}
       {selectedQueue && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+        <Modal label="Send direct offer" close={() => setSelectedQueue(null)}>
+          {feedback?.type === 'error' && <p role="alert" className="mb-3 text-sm text-slate-800">{feedback.message}</p>}
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">
                 Send Direct Offer to {selectedQueue.customerName}
@@ -1276,7 +1294,7 @@ export const DealerDashboard: React.FC = () => {
               </label>
 
               <Input
-                label="Offer Price (USD)"
+                label="Offer Price (INR)"
                 type="number"
                 placeholder="e.g. 27800"
                 value={offerPrice}
@@ -1293,7 +1311,7 @@ export const DealerDashboard: React.FC = () => {
                   rows={3}
                   value={offerNotes}
                   onChange={e => setOfferNotes(e.target.value)}
-                  placeholder="e.g. Immediate delivery from showroom, $1,000 cash discount, complimentary accessories..."
+                  placeholder="e.g. Immediate delivery from showroom, ₹20,000 cash discount, complimentary accessories..."
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg text-slate-900"
                 />
               </div>
@@ -1307,8 +1325,7 @@ export const DealerDashboard: React.FC = () => {
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
